@@ -530,6 +530,34 @@ export class UIManager {
         requestAnimationFrame(fade);
     }
 
+     getCurrentTimelineSelection() {
+        // Option 1: If you have a select dropdown for timelines
+        const timelineSelector = document.getElementById('timelineSelector'); // Assuming you add/have an element with this ID
+        if (timelineSelector && timelineSelector.value) {
+            console.log('UIManager:getCurrentTimelineSelection - Selected from #timelineSelector:', timelineSelector.value);
+            return timelineSelector.value;
+        }
+
+        // Option 2: If you store the current timeline ID elsewhere in the UI or state managed by UI
+        // For example, if you have a data attribute on a container:
+        // const timelineViewContainer = document.getElementById('timelineViewContainer');
+        // if (timelineViewContainer && timelineViewContainer.dataset.currentTimelineId) {
+        //     return timelineViewContainer.dataset.currentTimelineId;
+        // }
+
+        // Fallback or default if no specific selection mechanism is found yet
+        // In "kid mode", it might default to the kid's own timeline if only one kid is active,
+        // or require explicit selection. For now, returning null or a default.
+        // console.warn('UIManager:getCurrentTimelineSelection - No specific timeline selector found or no value. Defaulting might be needed or this indicates an incomplete UI setup for timeline viewing.');
+        
+        // If in kid mode and there's a logged-in kid, you might infer it.
+        // However, the password input is generic, so explicit selection is better.
+        // For now, let's assume 'general' if nothing else is explicitly selected,
+        // as per the OR condition in main.js, but ideally, the UI should make this clear.
+        // Returning null will force the 'general' fallback in main.js if no selector is found.
+        return null;
+    }
+    
     // Cleanup method
     cleanup() {
         this.elements = {};

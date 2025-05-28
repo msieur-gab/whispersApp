@@ -1,5 +1,5 @@
 /**
- * Database Management
+ * Database Management - REFACTORED
  * Handles all IndexedDB operations using Dexie
  */
 
@@ -12,30 +12,67 @@ export class DatabaseManager {
     async init() {
         try {
             console.log('🗃️ Initializing database...');
-            
-            // Initialize Dexie database
             this.db = new Dexie('FamilyTimelineDB');
-            
-            // Define schema
+
+            // Define schema versions in ascending order.
+            // Version 1: Define the original schema.
+            // If your app never had a v1 with the old 'entries' structure,
+            // you could start with version(1) having the new schema.
+            // However, if there's a possibility of upgrading from an older structure:
             this.db.version(1).stores({
-                settings: 'id', // App settings
-                kids: '++id, name, isActive', // Kid profiles with encrypted passwords
-                entries: '++id, timestamp, *targetTimelines' // Timeline entries
+                settings: 'id',
+                kids: '++id, name, isActive',
+                // Assuming v1 had the old entry structure (if it existed):
+                entries: '++id, timestamp, *targetTimelines, encryptionInfo, data_iv_base64, encryptedContent_base64'
             });
 
-            // Open database
+            // Version 2: Defines the new schema for entries and how to upgrade from v1.
+            this.db.version(2).stores({
+                // settings and kids tables are carried over from v1 schema if not redefined.
+                // We only need to define the schema for 'entries' as it's changing.
+                entries: '++id, timestamp, targetTimeline, salt_base64, iv_base64, encryptedContent_base64'
+            }).upgrade(tx => {
+                // This function is called when a database with version < 2 is opened.
+                console.log("Upgrading database from an older version to version 2...");
+                // If migrating data is necessary, it would happen here.
+                // For example, if 'entries' table existed with v1 schema:
+                // Potentially: return tx.table('entries').clear(); // to remove old incompatible entries
+                // Or, attempt a more complex data migration.
+                // Since you mentioned "rebuilding the db", this upgrade path might be less
+                // critical for your immediate testing if the DB is deleted, but it's essential for
+                // existing users who would have a v1 database.
+                console.log("Entries table schema is now: ++id, timestamp, targetTimeline, salt_base64, iv_base64, encryptedContent_base64");
+            });
+
+            // Higher versions would go here, e.g.:
+            // this.db.version(3).stores({...}).upgrade(...);
+
             await this.db.open();
-            
             this.initialized = true;
-            console.log('✅ Database initialized successfully');
+            const currentVersion = this.db.verno;
+            console.log(`✅ Database initialized successfully. Effective database version: ${currentVersion}`);
             
+            // Sanity check for the 'entries' table and its expected index
+            if (this.db.entries && typeof this.db.entries.where === 'function') {
+                console.log("✅ Sanity check: 'this.db.entries.where' is a function. Table object seems okay.");
+            } else {
+                console.error("❌ Sanity check failed: 'this.db.entries.where' is not a function. Schema issue likely persists.");
+            }
+
         } catch (error) {
             console.error('❌ Database initialization failed:', error);
+            if (error.name === "SchemaError") {
+                console.error("❌ Dexie SchemaError: Problem with versions/stores definition.", error.message, error.stack);
+            } else if (error.name === "OpenFailedError") {
+                console.error("❌ Dexie OpenFailedError: Database could not be opened.", error.message, error.stack);
+            } else {
+                console.error("❌ Other error during DB init:", error.message, error.stack);
+            }
             throw new Error(`Database initialization failed: ${error.message}`);
         }
     }
 
-    // Settings Management
+    // Settings Management (getAppSettings, saveAppSettings) unchanged.
     async getAppSettings() {
         try {
             this.ensureInitialized();
@@ -62,7 +99,7 @@ export class DatabaseManager {
         }
     }
 
-    // Kids Management
+    // Kids Management (getKids, createKid, updateKidPassword, removeKid, getKid) unchanged.
     async getKids() {
         try {
             this.ensureInitialized();
@@ -70,7 +107,6 @@ export class DatabaseManager {
                 .where('isActive')
                 .equals(1)
                 .toArray();
-            
             console.log(`📚 Loaded ${kids.length} kids from database`);
             return kids;
         } catch (error) {
@@ -82,18 +118,15 @@ export class DatabaseManager {
     async createKid(kidData) {
         try {
             this.ensureInitialized();
-            
             const kid = {
                 name: kidData.name,
                 isActive: 1,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
-                // Encrypted password data
                 encryptedPassword_base64: kidData.encryptedPassword_base64,
                 salt_base64: kidData.salt_base64,
                 iv_base64: kidData.iv_base64
             };
-
             const kidId = await this.db.kids.add(kid);
             console.log(`👶 Kid created: ${kidData.name} (ID: ${kidId})`);
             return kidId;
@@ -102,16 +135,14 @@ export class DatabaseManager {
             throw error;
         }
     }
-
+    
     async updateKidPassword(kidId, encryptedData) {
         try {
             this.ensureInitialized();
-            
             await this.db.kids.update(kidId, {
                 ...encryptedData,
                 updatedAt: new Date().toISOString()
             });
-            
             console.log(`🔑 Kid password updated: ID ${kidId}`);
         } catch (error) {
             console.error('Failed to update kid password:', error);
@@ -122,13 +153,10 @@ export class DatabaseManager {
     async removeKid(kidId) {
         try {
             this.ensureInitialized();
-            
-            // Soft delete - mark as inactive
             await this.db.kids.update(kidId, {
                 isActive: 0,
                 updatedAt: new Date().toISOString()
             });
-            
             console.log(`🗑️ Kid removed: ID ${kidId}`);
         } catch (error) {
             console.error('Failed to remove kid:', error);
@@ -147,22 +175,19 @@ export class DatabaseManager {
         }
     }
 
-    // Entries Management
     async createEntry(entryData) {
         try {
             this.ensureInitialized();
-            
             const entry = {
                 timestamp: new Date().toISOString(),
-                targetTimelines: entryData.targets || [],
+                targetTimeline: entryData.targetTimeline,
                 encryptedContent_base64: entryData.encryptedContent_base64,
-                data_iv_base64: entryData.data_iv_base64,
-                encryptionInfo: entryData.encryptionInfo,
+                salt_base64: entryData.salt_base64,
+                iv_base64: entryData.iv_base64,
                 createdAt: new Date().toISOString()
             };
-
             const entryId = await this.db.entries.add(entry);
-            console.log(`📝 Entry created: ID ${entryId}`);
+            console.log(`📝 Entry created for timeline ${entryData.targetTimeline}: ID ${entryId}`);
             return entryId;
         } catch (error) {
             console.error('Failed to create entry:', error);
@@ -178,8 +203,7 @@ export class DatabaseManager {
                 .reverse()
                 .limit(limit)
                 .toArray();
-            
-            console.log(`📚 Loaded ${entries.length} entries from database`);
+            console.log(`📚 Loaded ${entries.length} entries from database (all timelines)`);
             return entries;
         } catch (error) {
             console.error('Failed to get entries:', error);
@@ -187,7 +211,7 @@ export class DatabaseManager {
         }
     }
 
-    async getEntry(entryId) {
+    async getEntry(entryId) { 
         try {
             this.ensureInitialized();
             const entry = await this.db.entries.get(entryId);
@@ -197,22 +221,28 @@ export class DatabaseManager {
             return null;
         }
     }
-
-    async getEntriesForTimeline(timeline, limit = 50) {
+    
+    async getEntriesForTimeline(timelineId, limit = 50) {
         try {
-            this.ensureInitialized();
+            this.ensureInitialized(); // This is where database.js:244 was mentioned in stack trace
+            console.log(`Attempting to get entries for timeline: '${timelineId}'`);
+            if (!this.db.entries) {
+                console.error("`this.db.entries` is not defined or accessible. Schema issue?");
+                throw new Error("Entries table is not available in the database.");
+            }
             const entries = await this.db.entries
-                .where('targetTimelines')
-                .anyOf([timeline])
+                .where('targetTimeline') // This requires 'targetTimeline' to be an index in the current schema
+                .equals(timelineId) 
+                .orderBy('timestamp')
                 .reverse()
                 .limit(limit)
                 .toArray();
-            
-            console.log(`📚 Loaded ${entries.length} entries for timeline: ${timeline}`);
+            console.log(`📚 Loaded ${entries.length} entries for timeline: ${timelineId}`);
             return entries;
         } catch (error) {
-            console.error('Failed to get entries for timeline:', error);
-            return [];
+            console.error(`Failed to get entries for timeline ${timelineId}:`, error.name, error.message, error.stack);
+            // Re-throw or handle as appropriate for your application's error flow
+            throw error; 
         }
     }
 
@@ -221,56 +251,37 @@ export class DatabaseManager {
             this.ensureInitialized();
             await this.db.entries.delete(entryId);
             console.log(`🗑️ Entry deleted: ID ${entryId}`);
-        } catch (error) {
+        } catch (error)
+        {
             console.error('Failed to delete entry:', error);
             throw error;
         }
     }
 
-    // Search functionality
-    async searchEntries(query, limit = 20) {
+    async searchEntries(query, currentTimelineId, passwordForTimeline, limit = 20) {
+        console.warn("searchEntries needs review: Searching encrypted content is complex. This is a placeholder.");
         try {
             this.ensureInitialized();
-            
-            // Note: This is a simple search. For encrypted content, 
-            // we'd need to decrypt and search, which is complex.
-            // For now, we search by timestamp and target timelines
-            const entries = await this.db.entries
-                .orderBy('timestamp')
-                .reverse()
-                .limit(limit * 2) // Get more to filter
-                .toArray();
-            
-            // Filter by query (basic implementation)
-            const filtered = entries.filter(entry => {
-                const searchableText = `${entry.timestamp} ${entry.targetTimelines.join(' ')}`;
-                return searchableText.toLowerCase().includes(query.toLowerCase());
-            }).slice(0, limit);
-            
-            console.log(`🔍 Search "${query}" returned ${filtered.length} results`);
-            return filtered;
+             if (!currentTimelineId || !passwordForTimeline) {
+                console.log("Search requires a timeline context and password to decrypt.");
+                return [];
+            }
+            // Placeholder: actual search would require decryption and then filtering.
+            return [];
         } catch (error) {
             console.error('Failed to search entries:', error);
             return [];
         }
     }
 
-    // Statistics
     async getStats() {
         try {
             this.ensureInitialized();
-            
             const [totalEntries, totalKids] = await Promise.all([
                 this.db.entries.count(),
                 this.db.kids.where('isActive').equals(1).count()
             ]);
-            
-            const stats = {
-                totalEntries,
-                totalKids,
-                dbSize: await this.estimateDbSize()
-            };
-            
+            const stats = { totalEntries, totalKids, dbSize: await this.estimateDbSize() };
             console.log('📊 Database stats:', stats);
             return stats;
         } catch (error) {
@@ -279,32 +290,27 @@ export class DatabaseManager {
         }
     }
 
-    // Backup and Restore
     async exportData() {
         try {
             this.ensureInitialized();
-            
             const [settings, kids, entries] = await Promise.all([
                 this.db.settings.toArray(),
                 this.db.kids.where('isActive').equals(1).toArray(),
                 this.db.entries.toArray()
             ]);
-            
             const exportData = {
-                version: 1,
+                version: 2,
                 exportedAt: new Date().toISOString(),
                 settings,
                 kids: kids.map(k => ({
                     ...k,
-                    // Include encrypted password data for backup
                     encryptedPassword_base64: k.encryptedPassword_base64,
                     salt_base64: k.salt_base64,
-                    iv_base64: k.iv_base64
+                    iv_base64: k.iv_base_64
                 })),
                 entries
             };
-            
-            console.log(`📦 Exported ${entries.length} entries and ${kids.length} kids`);
+            console.log(`📦 Exported ${entries.length} entries and ${kids.length} kids (v2 format)`);
             return exportData;
         } catch (error) {
             console.error('Failed to export data:', error);
@@ -315,58 +321,56 @@ export class DatabaseManager {
     async importData(data) {
         try {
             this.ensureInitialized();
-            
-            if (!data || data.version !== 1) {
-                throw new Error('Invalid or unsupported backup format');
+            if (!data || (data.version !== 1 && data.version !== 2)) {
+                throw new Error('Invalid or unsupported backup format. Expected v1 or v2.');
             }
-            
-            let importedCount = 0;
-            
-            // Import settings
-            if (data.settings) {
-                for (const setting of data.settings) {
-                    await this.db.settings.put(setting);
+            let importedSettingsCount = 0;
+            let importedKidsCount = 0;
+            let importedEntriesCount = 0;
+            await this.db.transaction('rw', this.db.settings, this.db.kids, this.db.entries, async () => {
+                if (data.settings) {
+                    for (const setting of data.settings) {
+                        await this.db.settings.put(setting);
+                        importedSettingsCount++;
+                    }
                 }
-            }
-            
-            // Import kids
-            if (data.kids) {
-                for (const kid of data.kids) {
-                    await this.db.kids.put({
-                        ...kid,
-                        updatedAt: new Date().toISOString()
-                    });
+                if (data.kids) {
+                    for (const kid of data.kids) {
+                        await this.db.kids.put({ ...kid, updatedAt: new Date().toISOString() });
+                        importedKidsCount++;
+                    }
                 }
-                importedCount += data.kids.length;
-            }
-            
-            // Import entries
-            if (data.entries) {
-                for (const entry of data.entries) {
-                    await this.db.entries.put(entry);
+                if (data.entries) {
+                    if (data.version === 2) {
+                        for (const entry of data.entries) {
+                            if (entry.salt_base64 && entry.iv_base64 && entry.targetTimeline) {
+                                await this.db.entries.put(entry);
+                                importedEntriesCount++;
+                            } else {
+                                console.warn("Skipping entry during import due to missing fields for v2 format:", entry.id || "Unknown ID");
+                            }
+                        }
+                    } else if (data.version === 1) {
+                        console.warn("Importing v1 entries. These may not be usable with the new crypto model.");
+                    }
                 }
-                importedCount += data.entries.length;
-            }
-            
-            console.log(`📥 Imported ${importedCount} items from backup`);
-            return importedCount;
+            });
+            console.log(`📥 Import complete: ${importedSettingsCount} settings, ${importedKidsCount} kids, ${importedEntriesCount} entries.`);
+            return { settings: importedSettingsCount, kids: importedKidsCount, entries: importedEntriesCount };
         } catch (error) {
             console.error('Failed to import data:', error);
             throw error;
         }
     }
 
-    // Maintenance
     async clearAllData() {
         try {
             this.ensureInitialized();
-            
             await Promise.all([
                 this.db.settings.clear(),
                 this.db.kids.clear(),
                 this.db.entries.clear()
             ]);
-            
             console.log('🧹 All data cleared from database');
         } catch (error) {
             console.error('Failed to clear data:', error);
@@ -376,10 +380,7 @@ export class DatabaseManager {
 
     async estimateDbSize() {
         try {
-            if (!navigator.storage || !navigator.storage.estimate) {
-                return 0;
-            }
-            
+            if (!navigator.storage || !navigator.storage.estimate) return 0;
             const estimate = await navigator.storage.estimate();
             return estimate.usage || 0;
         } catch (error) {
@@ -387,26 +388,20 @@ export class DatabaseManager {
             return 0;
         }
     }
-
+    
     async compactDatabase() {
         try {
             this.ensureInitialized();
-            
-            // Remove soft-deleted kids older than 30 days
             const thirtyDaysAgo = new Date();
             thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-            
             const deletedKids = await this.db.kids
-                .where('isActive')
-                .equals(0)
+                .where('isActive').equals(0)
                 .and(kid => new Date(kid.updatedAt) < thirtyDaysAgo)
                 .toArray();
-            
             for (const kid of deletedKids) {
                 await this.db.kids.delete(kid.id);
             }
-            
-            console.log(`🗜️ Database compacted: removed ${deletedKids.length} old entries`);
+            console.log(`🗜️ Database compacted: removed ${deletedKids.length} old kid entries`);
             return deletedKids.length;
         } catch (error) {
             console.error('Failed to compact database:', error);
@@ -414,9 +409,9 @@ export class DatabaseManager {
         }
     }
 
-    // Utility methods
     ensureInitialized() {
         if (!this.initialized || !this.db) {
+            console.error("ensureInitialized check failed: initialized =", this.initialized, ", db exists =", !!this.db);
             throw new Error('Database not initialized. Call init() first.');
         }
     }
@@ -424,7 +419,6 @@ export class DatabaseManager {
     async isHealthy() {
         try {
             this.ensureInitialized();
-            // Simple health check - try to count entries
             await this.db.entries.count();
             return true;
         } catch (error) {
@@ -433,7 +427,6 @@ export class DatabaseManager {
         }
     }
 
-    // Close database connection
     async close() {
         if (this.db) {
             this.db.close();

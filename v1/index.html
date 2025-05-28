@@ -119,15 +119,17 @@
         </section>
 
         <!-- View Timeline Section -->
-        <section class="content-section" id="viewSection">
+       <section class="content-section" id="viewSection">
             <h2>My Timeline</h2>
             
-            <div class="password-input">
-                <input type="password" id="viewerPassword" placeholder="Enter your timeline password">
+            <div class="timeline-controls">
+                <label for="viewerPassword" class="sr-only">Timeline Password:</label> <input type="password" id="viewerPassword" placeholder="Enter your timeline password">
+                
+                <button id="loadTimelineBtn" class="btn">View Timeline</button>
             </div>
 
             <div class="timeline-entries" id="timelineEntries">
-                <p class="placeholder-text">Enter your password to view your timeline entries.</p>
+                <p class="placeholder-text">Enter your password to unlock and view your timeline.</p>
             </div>
         </section>
 
