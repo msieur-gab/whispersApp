@@ -1,6 +1,7 @@
 /**
- * Main Application Entry Point
+ * Main Application Entry Point - PHASE 1 COMPLETE
  * Orchestrates modules and initializes the Family Timeline app
+ * UPDATED: Timeline-specific entry creation, better password UX
  */
 
 import { AppState } from './modules/state.js';
@@ -31,7 +32,7 @@ class FamilyTimelineApp {
             
             // Initialize modules
             await this.db.init();
-            await this.state.init(); // Ensure state constructor log runs
+            await this.state.init();
             this.ui.init();
             
             // Set up event listeners
@@ -63,7 +64,7 @@ class FamilyTimelineApp {
             
             // Load kid profiles
             const kids = await this.db.getKids();
-            this.state.setKids(kids); // This will populate this.state.kids
+            this.state.setKids(kids);
             
             console.log('📊 Initial data loaded');
         } catch (error) {
@@ -169,17 +170,36 @@ class FamilyTimelineApp {
         });
     }
 
+    // UPDATED: Timeline listeners with submit button (Phase 1 fix)
     setupTimelineListeners() {
         const viewerPassword = document.getElementById('viewerPassword');
+        const loadTimelineBtn = document.getElementById('loadTimelineBtn');
 
-        viewerPassword?.addEventListener('input', async (e) => {
-            const password = e.target.value;
-            if (password.length > 0) { // Only load if password has content
-                await this.handleLoadTimeline(password);
-            } else {
-                this.ui.clearTimeline();
-            }
-        });
+        // FIXED: Submit button approach instead of input listener
+        if (loadTimelineBtn) {
+            loadTimelineBtn.addEventListener('click', async () => {
+                const password = viewerPassword.value;
+                if (password) {
+                    await this.handleLoadTimeline(password);
+                } else {
+                    showStatus('Please enter your timeline password', 'error');
+                }
+            });
+        }
+
+        // Enter key support
+        if (viewerPassword) {
+            viewerPassword.addEventListener('keydown', async (e) => {
+                if (e.key === 'Enter') {
+                    const password = e.target.value;
+                    if (password) {
+                        await this.handleLoadTimeline(password);
+                    } else {
+                        showStatus('Please enter your timeline password', 'error');
+                    }
+                }
+            });
+        }
 
         // Event delegation for timeline entry clicks
         document.addEventListener('timeline-entry-click', (e) => {
@@ -223,18 +243,12 @@ class FamilyTimelineApp {
         }
 
         try {
-            // startParentSession will reset kidPasswords in state
             const success = await this.state.startParentSession(password); 
             
             if (success) {
-                // loadKidPasswordsToSession will attempt to populate kidPasswords in state
                 const loadedCount = await this.loadKidPasswordsToSession();
-                // ADDED LOG: To see state immediately after loading
-                console.log('handleParentLogin: AFTER loadKidPasswordsToSession. Session kidPasswords:', JSON.stringify(this.state.parentSession.kidPasswords), 'Loaded count:', loadedCount);
-                
-                this.ui.updateKidsDisplay(); // Explicitly update kids display now that passwords are loaded
+                this.ui.updateKidsDisplay();
 
-                
                 if (loadedCount === 0 && this.state.kids.length > 0) {
                     const reEncrypt = confirm(
                         `Cannot decrypt existing kid passwords with this master password.\n\n` +
@@ -255,18 +269,16 @@ class FamilyTimelineApp {
                     passwordComponent.clearPassword();
                 }
             } else {
-                showStatus('Invalid master password', 'error'); // Or session start failed for other reasons
+                showStatus('Invalid master password', 'error');
             }
         } catch (error) {
             console.error('Login error:', error);
             showStatus('Login failed: ' + (error.message || 'Unknown error'), 'error');
         }
-        // ADDED LOG: To see state at the very end of this function
-        console.log('handleParentLogin: AT EXIT. Session kidPasswords:', JSON.stringify(this.state.parentSession.kidPasswords), 'Parent session active:', this.state.parentSession.active);
     }
 
     handleParentLogout() {
-        this.state.endParentSession(); // This will reset kidPasswords in state
+        this.state.endParentSession();
         showStatus('Parent session ended', 'success');
     }
 
@@ -280,7 +292,7 @@ class FamilyTimelineApp {
                 if (!confirmLogout) return;
             }
             this.state.setMode('kid');
-            this.state.endParentSession(); // This will also reset kidPasswords in state
+            this.state.endParentSession();
             showStatus('Switched to Kid Mode', 'success');
         }
     }
@@ -317,13 +329,13 @@ class FamilyTimelineApp {
             const newKidData = {
                 id: kidId,
                 name,
-                isActive: 1, // Assuming isActive is 1 for new kids
+                isActive: 1,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 ...encryptedData
             };
             this.state.addKid(newKidData);
-            this.state.setKidPasswordInSession(kidId, password); // Adds cleartext pass to current session
+            this.state.setKidPasswordInSession(kidId, password);
 
             nameInput.value = '';
             passwordComponent.clearPassword();
@@ -344,8 +356,8 @@ class FamilyTimelineApp {
             );
             if (!confirmRemove) return;
 
-            await this.db.removeKid(kidId); // Soft delete in DB
-            this.state.removeKid(kidId); // Removes from state and session kidPasswords
+            await this.db.removeKid(kidId);
+            this.state.removeKid(kidId);
             
             showStatus(`${kid.name} removed successfully`, 'success');
         } catch (error) {
@@ -370,8 +382,8 @@ class FamilyTimelineApp {
             const encryptedData = await this.crypto.encryptKidPassword(newPassword, parentPassword);
 
             await this.db.updateKidPassword(kidId, encryptedData);
-            this.state.updateKidPassword(kidId, encryptedData); // Updates encrypted data in state.kids
-            this.state.setKidPasswordInSession(kidId, newPassword); // Updates cleartext pass in current session
+            this.state.updateKidPassword(kidId, encryptedData);
+            this.state.setKidPasswordInSession(kidId, newPassword);
 
             showStatus(`Password updated for ${kid.name}!`, 'success');
         } catch (error) {
@@ -399,9 +411,10 @@ class FamilyTimelineApp {
         }
     }
 
+    // UPDATED: Phase 1 - Creates multiple timeline entries
     async handleCreateEntry() {
-        // ADDED LOG: To see state at the very start of this function
-        console.log('handleCreateEntry: AT START. Session kidPasswords:', JSON.stringify(this.state.parentSession.kidPasswords), 'Parent session active:', this.state.parentSession.active);
+        console.log('📝 Creating individual entries per timeline (Phase 1)');
+        
         try {
             const text = document.getElementById('entryText').value;
             const imageFile = document.getElementById('imageInput').files[0];
@@ -409,12 +422,8 @@ class FamilyTimelineApp {
             const targets = Array.from(document.querySelectorAll('input[name="target"]:checked'))
                 .map(cb => cb.value);
 
-            // Original detailed logs for handleCreateEntry - these are good to keep
-            console.log('handleCreateEntry: 🎯 Creating entry with targets:', targets);
-            console.log('handleCreateEntry: 🔑 Available kid password IDs in session:', Object.keys(this.state.parentSession.kidPasswords));
-            // console.log('handleCreateEntry: 🔑 Full session kidPasswords content:', JSON.stringify(this.state.parentSession.kidPasswords)); // Be careful logging actual passwords
-            console.log('handleCreateEntry: 👶 Current kids in state:', this.state.kids.map(k => `${k.name} (ID: ${k.id})`));
-
+            console.log('📝 Targets selected:', targets);
+            console.log('🔑 Available kid password IDs in session:', Object.keys(this.state.parentSession.kidPasswords));
 
             if (!text && !imageFile && !audioFile) {
                 showStatus('Please provide some content for the entry', 'error');
@@ -428,8 +437,8 @@ class FamilyTimelineApp {
             const kidTargets = targets.filter(t => t.startsWith('kid'));
             const missingPasswords = kidTargets.filter(target => {
                 const kidId = parseInt(target.replace('kid', ''));
-                const hasPassword = !!this.state.parentSession.kidPasswords[kidId]; // Check if password for this kidId exists in session
-                console.log(`handleCreateEntry: Checking target ${target} (kidId: ${kidId}): Password in session? ${hasPassword}`);
+                const hasPassword = !!this.state.parentSession.kidPasswords[kidId];
+                console.log(`Checking target ${target} (kidId: ${kidId}): Password in session? ${hasPassword}`);
                 return !hasPassword;
             });
 
@@ -453,19 +462,55 @@ class FamilyTimelineApp {
             if (imageFile) content.image = await this.crypto.fileToBase64(imageFile);
             if (audioFile) content.audio = await this.crypto.fileToBase64(audioFile);
 
-            const encryptedEntry = await this.crypto.encryptEntry(
+            // NEW: Get array of encrypted entries (one per timeline)
+            const encryptedEntries = await this.crypto.encryptEntry(
                 content,
                 targets,
-                this.state.parentSession.password,      // Parent's master password
-                this.state.parentSession.kidPasswords  // Decrypted kid passwords from session
+                this.state.parentSession.password,
+                this.state.parentSession.kidPasswords
             );
 
-            const entryId = await this.db.createEntry(encryptedEntry);
+            console.log(`📝 Created ${encryptedEntries.length} encrypted entries for ${targets.length} targets`);
+
+            // NEW: Store each entry separately in the database
+            const entryIds = [];
+            for (const encryptedEntry of encryptedEntries) {
+                console.log(`💾 Storing entry for timeline: ${encryptedEntry.timeline}`);
+                
+                // Create entry data compatible with existing database structure
+                const entryData = {
+                    targets: encryptedEntry.targets, // Single target now
+                    encryptedContent_base64: encryptedEntry.encryptedContent_base64,
+                    data_iv_base64: encryptedEntry.data_iv_base64,
+                    encryptionInfo: encryptedEntry.encryptionInfo,
+                    // NEW: Add salt for new entries
+                    salt_base64: encryptedEntry.salt_base64,
+                    timeline: encryptedEntry.timeline // Track which timeline this belongs to
+                };
+
+                const entryId = await this.db.createEntry(entryData);
+                entryIds.push(entryId);
+                console.log(`✅ Entry stored for ${encryptedEntry.timeline}: ID ${entryId}`);
+            }
+
+            // Clear form
             document.getElementById('entryForm').reset();
             document.querySelectorAll('input[name="target"]').forEach(cb => cb.checked = false);
-            this.ui.updateCreateButtonState(); // Ensure button state updates after reset
+            this.ui.updateCreateButtonState();
 
-            showStatus(`Entry created successfully! (ID: ${entryId})`, 'success');
+            // Updated success message
+            const timelineNames = targets.map(target => {
+                if (target === 'general') return this.state.settings.generalTimelineName || 'Family Timeline';
+                if (target.startsWith('kid')) {
+                    const kidId = parseInt(target.replace('kid', ''));
+                    const kid = this.state.kids.find(k => k.id === kidId);
+                    return kid ? `${kid.name}'s Timeline` : target;
+                }
+                return target;
+            }).join(', ');
+
+            showStatus(`Entry created for: ${timelineNames} (${entryIds.length} entries stored)`, 'success');
+            
         } catch (error) {
             console.error('Create entry error:', error);
             showStatus('Failed to create entry: ' + error.message, 'error');
@@ -474,7 +519,7 @@ class FamilyTimelineApp {
 
     async handleLoadTimeline(password) {
         try {
-            const entries = await this.db.getEntries(); // Get all entries
+            const entries = await this.db.getEntries();
             const accessibleEntries = [];
 
             for (const entry of entries) {
@@ -482,12 +527,11 @@ class FamilyTimelineApp {
                     const decryptedContent = await this.crypto.decryptEntry(entry, password);
                     if (decryptedContent) {
                         accessibleEntries.push({
-                            ...entry, // Spread original entry to keep id, timestamp etc. from DB
-                            decryptedContent // Add decrypted part
+                            ...entry,
+                            decryptedContent
                         });
                     }
                 } catch (error) {
-                    // Log and skip entries that can't be decrypted, don't stop the whole process
                     console.warn(`Could not decrypt entry ID ${entry.id} with the provided password.`, error.message);
                     continue;
                 }
@@ -525,7 +569,6 @@ class FamilyTimelineApp {
         }
     }
 
-    // Updated loadKidPasswordsToSession with more detailed logging
     async loadKidPasswordsToSession() {
         if (!this.state.parentSession.active || !this.state.parentSession.password) {
             console.warn('loadKidPasswordsToSession: Parent session not active or master password not set in session. Skipping kid password loading.');
@@ -536,7 +579,7 @@ class FamilyTimelineApp {
         }
     
         const parentPassword = this.state.parentSession.password;
-        const kidPasswords = {}; // This will store successfully decrypted passwords for this session
+        const kidPasswords = {};
         let successCount = 0;
     
         console.log('loadKidPasswordsToSession: Starting. Using parent master password of length:', parentPassword.length);
@@ -544,11 +587,11 @@ class FamilyTimelineApp {
     
         if (!this.state.kids || this.state.kids.length === 0) {
             console.log('loadKidPasswordsToSession: No kids found in state to process.');
-            this.state.parentSession.kidPasswords = kidPasswords; // Ensure it's at least an empty object
+            this.state.parentSession.kidPasswords = kidPasswords;
             return 0;
         }
 
-        for (const kid of this.state.kids) { // kid object from this.state.kids
+        for (const kid of this.state.kids) {
             console.log(`loadKidPasswordsToSession: Processing kid: ID=${kid.id}, Name=${kid.name}.`);
             console.log(`loadKidPasswordsToSession: Kid data for decryption (from state) - Salt: ${kid.salt_base64 ? 'Exists' : 'MISSING!'}, IV: ${kid.iv_base64 ? 'Exists' : 'MISSING!'}, EncPass: ${kid.encryptedPassword_base64 ? 'Exists' : 'MISSING!'}`);
     
@@ -560,7 +603,7 @@ class FamilyTimelineApp {
             try {
                 const decryptedPassword = await this.crypto.decryptKidPassword(kid, parentPassword);
                 if (decryptedPassword) {
-                    kidPasswords[kid.id] = decryptedPassword; // Add to temporary object
+                    kidPasswords[kid.id] = decryptedPassword;
                     successCount++;
                     console.log(`loadKidPasswordsToSession: ✅ Successfully decrypted and loaded password for kid ${kid.name} (ID: ${kid.id})`);
                 } else {
@@ -571,7 +614,6 @@ class FamilyTimelineApp {
             }
         }
     
-        // CRITICAL: Update the session state with the passwords loaded in THIS execution
         this.state.parentSession.kidPasswords = kidPasswords; 
         console.log(`loadKidPasswordsToSession: 🔑 Finished. Loaded ${successCount}/${this.state.kids.length} kid passwords into session. Session kid IDs:`, Object.keys(this.state.parentSession.kidPasswords));
         if (successCount < this.state.kids.length && this.state.kids.length > 0) {
@@ -579,6 +621,117 @@ class FamilyTimelineApp {
         }
         
         return successCount;
+    }
+
+    // NEW: Phase 1 - Timeline export helper
+    async exportTimelineData(timelineTarget) {
+        try {
+            if (!this.state.parentSession.active) {
+                showStatus('Please login as parent first', 'error');
+                return;
+            }
+            
+            console.log(`📦 Exporting timeline: ${timelineTarget}`);
+            
+            // Get all entries and filter for this timeline
+            const allEntries = await this.db.getEntries();
+            const timelineEntries = allEntries.filter(entry => {
+                // Support both old and new formats
+                if (entry.timeline === timelineTarget) return true;
+                if (entry.targets && entry.targets.includes(timelineTarget)) return true;
+                return false;
+            });
+            
+            console.log(`📊 Found ${timelineEntries.length} entries for ${timelineTarget}`);
+            
+            // Get the right password for this timeline
+            let password;
+            if (timelineTarget === 'general') {
+                password = this.state.parentSession.password;
+            } else if (timelineTarget.startsWith('kid')) {
+                const kidId = parseInt(timelineTarget.replace('kid', ''));
+                password = this.state.parentSession.kidPasswords[kidId];
+            }
+            
+            if (!password) {
+                showStatus(`No password available for ${timelineTarget}`, 'error');
+                return;
+            }
+            
+            // Decrypt entries
+            const decryptedEntries = [];
+            for (const entry of timelineEntries) {
+                try {
+                    const decrypted = await this.crypto.decryptEntry(entry, password);
+                    if (decrypted) {
+                        decryptedEntries.push({
+                            timestamp: entry.timestamp,
+                            content: decrypted.content,
+                            timeline: timelineTarget
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Skipping entry ${entry.id}: ${error.message}`);
+                }
+            }
+            
+            // Create export
+            const exportData = {
+                version: 2, // Phase 1 version
+                timeline: timelineTarget,
+                timelineName: this.getTimelineDisplayName(timelineTarget),
+                exportedAt: new Date().toISOString(),
+                entries: decryptedEntries,
+                metadata: {
+                    entryCount: decryptedEntries.length,
+                    exportType: 'timeline_specific',
+                    requiresPassword: 'This timeline export requires the specific timeline password to decrypt'
+                }
+            };
+            
+            // Download
+            const filename = `${timelineTarget}_export_${new Date().toISOString().split('T')[0]}.json`;
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showStatus(`Exported ${decryptedEntries.length} entries for ${this.getTimelineDisplayName(timelineTarget)}`, 'success');
+            
+        } catch (error) {
+            console.error('Export failed:', error);
+            showStatus('Export failed: ' + error.message, 'error');
+        }
+    }
+
+    // NEW: Helper method for timeline display names
+    getTimelineDisplayName(timeline) {
+        if (timeline === 'general') {
+            return this.state.settings.generalTimelineName || 'Family Timeline';
+        }
+        if (timeline.startsWith('kid')) {
+            const kidId = parseInt(timeline.replace('kid', ''));
+            const kid = this.state.kids.find(k => k.id === kidId);
+            return kid ? `${kid.name}'s Timeline` : timeline;
+        }
+        return timeline;
+    }
+
+    // NEW: Helper method to get timeline password
+    getTimelinePassword(timeline) {
+        if (timeline === 'general') {
+            return this.state.parentSession.password;
+        }
+        if (timeline.startsWith('kid')) {
+            const kidId = parseInt(timeline.replace('kid', ''));
+            return this.state.parentSession.kidPasswords[kidId];
+        }
+        return null;
     }
 }
 
@@ -598,6 +751,49 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Kids in State:', app.state.kids.map(k => ({ id: k.id, name: k.name, hasEncryptedFields: !!k.encryptedPassword_base64 })));
         console.log('Session Kid Passwords (IDs):', Object.keys(app.state.parentSession.kidPasswords));
         console.log('Full Session Kid Passwords object (for debugging - careful with actual passwords):', JSON.stringify(app.state.parentSession.kidPasswords));
+    };
+
+    // NEW: Phase 1 Testing helpers
+    window.testPhase1 = async () => {
+        if (!window.familyApp || !window.familyApp.state.parentSession.active) {
+            console.log('❌ Please login as parent first');
+            return;
+        }
+        
+        const content = { text: 'Test entry for Phase 1 - ' + new Date().toLocaleString() };
+        const targets = ['general']; // Change to ['kid1'] if you have kids
+        
+        try {
+            const encrypted = await window.familyApp.crypto.encryptEntry(
+                content,
+                targets,
+                window.familyApp.state.parentSession.password,
+                window.familyApp.state.parentSession.kidPasswords
+            );
+            
+            console.log('✅ Encryption test successful');
+            console.log('📊 Created entries:', encrypted.length);
+            
+            // Test decryption
+            const decrypted = await window.familyApp.crypto.decryptEntry(
+                encrypted[0], 
+                window.familyApp.state.parentSession.password
+            );
+            
+            console.log('✅ Decryption test successful');
+            console.log('📝 Decrypted content:', decrypted.content);
+            
+        } catch (error) {
+            console.error('❌ Test failed:', error);
+        }
+    };
+
+    window.exportTimeline = (timeline = 'general') => {
+        if (window.familyApp && window.familyApp.exportTimelineData) {
+            window.familyApp.exportTimelineData(timeline);
+        } else {
+            console.log('❌ App not ready or method not available');
+        }
     };
     
     await app.init();

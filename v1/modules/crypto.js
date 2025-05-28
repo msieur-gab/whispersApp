@@ -1,7 +1,6 @@
 /**
- * Cryptography Management - FIXED VERSION
- * Handles all encryption/decryption operations for the Family Timeline app
- * FIX: Ensures kid passwords are properly used for encryption
+ * Cryptography Management - PHASE 1: TIMELINE-SPECIFIC ENCRYPTION
+ * Copy-paste this entire file to replace your crypto.js
  */
 
 export class CryptoManager {
@@ -76,7 +75,7 @@ export class CryptoManager {
         );
     }
 
-    // Kid password encryption/decryption
+    // Kid password encryption/decryption - UNCHANGED
     async encryptKidPassword(kidPassword, parentPassword) {
         try {
             console.log('🔐 Encrypting kid password with parent password');
@@ -84,10 +83,8 @@ export class CryptoManager {
             const salt = this.generateRandomBytes(16);
             const iv = this.generateRandomBytes(12);
             
-            // Derive key from parent password
             const key = await this.deriveKeyFromPassword(parentPassword, salt);
             
-            // Encrypt kid password
             const encoder = new TextEncoder();
             const encryptedPassword = await window.crypto.subtle.encrypt(
                 { name: 'AES-GCM', iv: iv },
@@ -110,58 +107,33 @@ export class CryptoManager {
     }
 
     async decryptKidPassword(kidData, parentPassword) {
-        console.log(`decryptKidPassword: Attempting for kid (ID from kidData: ${kidData ? kidData.id : 'N/A'}). Parent password length: ${parentPassword ? parentPassword.length : 'N/A'}`);
-        if (!kidData) {
-            console.error('decryptKidPassword: Received null or undefined kidData.');
+        console.log(`decryptKidPassword: Attempting for kid (ID: ${kidData ? kidData.id : 'N/A'})`);
+        
+        if (!kidData || !kidData.salt_base64 || !kidData.iv_base64 || !kidData.encryptedPassword_base64) {
+            console.error('decryptKidPassword: Essential encryption fields missing');
             return null;
         }
-        console.log('decryptKidPassword: kidData received:', JSON.stringify({
-            id: kidData.id,
-            name: kidData.name,
-            encryptedPassword_base64_exists: !!kidData.encryptedPassword_base64,
-            salt_base64_exists: !!kidData.salt_base64,
-            iv_base64_exists: !!kidData.iv_base64,
-        }));
-        // Log the actual sensitive values just for this specific debug - REMOVE AFTER DEBUGGING if needed
-        // Be cautious with logging raw encrypted data or salts if these logs could be exposed.
-        // For local debugging, it can be invaluable.
-        // console.log('decryptKidPassword: Salt used (first 10 chars):', kidData.salt_base64?.substring(0,10));
-    
+
         try {
-            if (!kidData.salt_base64 || !kidData.iv_base64 || !kidData.encryptedPassword_base64) {
-                console.error('decryptKidPassword: ❌ Essential field(s) (salt, iv, or encryptedPassword) missing in kidData. Cannot decrypt.');
-                return null;
-            }
-    
             const salt = this.base64ToArrayBuffer(kidData.salt_base64);
             const iv = this.base64ToArrayBuffer(kidData.iv_base64);
             const encryptedPassword = this.base64ToArrayBuffer(kidData.encryptedPassword_base64);
             
-            console.log('decryptKidPassword: Salt, IV, EncryptedPassword successfully converted from base64 to ArrayBuffer.');
-    
-            // Derive key from parent password
             const key = await this.deriveKeyFromPassword(parentPassword, salt);
-            console.log('decryptKidPassword: Key derived from parent password successfully.');
             
-            // Decrypt kid password
             const decryptedBuffer = await window.crypto.subtle.decrypt(
                 { name: 'AES-GCM', iv: iv },
                 key,
                 encryptedPassword
             );
-            console.log('decryptKidPassword: window.crypto.subtle.decrypt call successful.');
-    
+
             const decoder = new TextDecoder();
             const kidPassword = decoder.decode(decryptedBuffer);
             
-            console.log(`decryptKidPassword: ✅ Password for kid (ID: ${kidData.id}) decrypted successfully.`);
+            console.log(`✅ Password for kid (ID: ${kidData.id}) decrypted successfully`);
             return kidPassword;
         } catch (error) {
-            console.warn(`decryptKidPassword: ❌ Decryption failed for kid (ID: ${kidData ? kidData.id : 'N/A'}). Error:`, error.message, error);
-            // Log more details about what might have failed if possible
-            if (error.name === 'OperationError') { // Common for crypto failures
-                console.warn('decryptKidPassword: This often means the key was incorrect (i.e., wrong parent password) or data was corrupted.');
-            }
+            console.warn(`❌ Decryption failed for kid (ID: ${kidData ? kidData.id : 'N/A'}):`, error.message);
             return null;
         }
     }
@@ -184,151 +156,196 @@ export class CryptoManager {
         });
     }
 
-    // FIXED: Entry encryption with proper kid password handling
-    async encryptEntry(content, targets, parentPassword, kidPasswords) {
+    // NEW: Simple single-timeline entry encryption 
+    async encryptSingleTimelineEntry(content, timelinePassword) {
         try {
-            console.log('🔐 Starting entry encryption...');
-            console.log('🎯 Targets:', targets);
-            console.log('🔑 Available kid passwords:', Object.keys(kidPasswords || {}));
-            console.log('🔑 Kid passwords content:', kidPasswords);
-
-            // Validate inputs
-            if (!parentPassword) {
-                throw new Error('Parent password is required');
-            }
-            if (!targets || targets.length === 0) {
-                throw new Error('At least one target is required');
+            console.log('🔐 Encrypting entry for single timeline...');
+            
+            if (!timelinePassword) {
+                throw new Error('Timeline password is required');
             }
 
-            // Generate data encryption key (DEK)
-            const dek = await window.crypto.subtle.generateKey(
-                { name: 'AES-GCM', length: 256 },
-                true,
-                ['encrypt', 'decrypt']
-            );
-
-            // Export DEK for key wrapping
-            const dekRaw = await window.crypto.subtle.exportKey('raw', dek);
-
-            // Encrypt content with DEK
-            const dataIv = this.generateRandomBytes(12);
+            // Generate salt and IV for this entry
+            const salt = this.generateRandomBytes(16);
+            const iv = this.generateRandomBytes(12);
+            
+            // Derive key from timeline password
+            const key = await this.deriveKeyFromPassword(timelinePassword, salt);
+            
+            // Encrypt content directly (no DEK wrapping complexity)
             const encoder = new TextEncoder();
             const encryptedContent = await window.crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: dataIv },
-                dek,
+                { name: 'AES-GCM', iv: iv },
+                key,
                 encoder.encode(JSON.stringify(content))
             );
 
-            // Prepare encryption info for each recipient
-            const encryptionInfo = {};
-
-            // ALWAYS encrypt for parent (for management purposes)
-            console.log('🔐 Encrypting DEK for parent...');
-            const parentSalt = this.generateRandomBytes(16);
-            const parentIv = this.generateRandomBytes(12);
-            const parentKek = await this.deriveKeyFromPassword(parentPassword, parentSalt);
-            const parentWrappedDek = await window.crypto.subtle.encrypt(
-                { name: 'AES-GCM', iv: parentIv },
-                parentKek,
-                dekRaw
-            );
-
-            encryptionInfo.parent = {
-                encryptedDek_base64: this.arrayBufferToBase64(parentWrappedDek),
-                salt_base64: this.arrayBufferToBase64(parentSalt),
-                iv_base64: this.arrayBufferToBase64(parentIv),
-                kdfIterations: this.KDF_ITERATIONS
-            };
-            console.log('✅ Parent encryption completed');
-
-            // Encrypt DEK for each target
-            for (const target of targets) {
-                let targetPassword;
-                let encryptionKey;
-
-                console.log(`🔐 Processing target: ${target}`);
-
-                if (target === 'general') {
-                    targetPassword = parentPassword;
-                    encryptionKey = 'general';
-                    console.log('📝 Using parent password for general timeline');
-                } else if (target.startsWith('kid')) {
-                    const kidId = parseInt(target.replace('kid', ''));
-                    console.log(`👶 Kid target detected: ID ${kidId}`);
-                    
-                    // CRITICAL FIX: Ensure we have kid passwords and the specific password
-                    if (!kidPasswords) {
-                        console.error('❌ Kid passwords object is null/undefined');
-                        throw new Error(`Kid passwords not available for encryption`);
-                    }
-                    
-                    targetPassword = kidPasswords[kidId];
-                    encryptionKey = target;
-                    
-                    console.log(`🔑 Kid ${kidId} password lookup:`, {
-                        passwordExists: !!targetPassword,
-                        passwordLength: targetPassword ? targetPassword.length : 0,
-                        allKidIds: Object.keys(kidPasswords)
-                    });
-                } else {
-                    console.warn(`❓ Unknown target type: ${target}`);
-                    continue;
-                }
-
-                // CRITICAL: Validate password exists
-                if (!targetPassword) {
-                    const errorMsg = `No password available for target: ${target}`;
-                    console.error(`❌ ${errorMsg}`);
-                    throw new Error(errorMsg);
-                }
-
-                console.log(`🔐 Encrypting DEK for ${target} with password length: ${targetPassword.length}`);
-
-                // Generate unique salt and IV for this recipient
-                const targetSalt = this.generateRandomBytes(16);
-                const targetIv = this.generateRandomBytes(12);
-                
-                // Derive key from target password
-                const targetKek = await this.deriveKeyFromPassword(targetPassword, targetSalt);
-                
-                // Encrypt DEK with target's password
-                const targetWrappedDek = await window.crypto.subtle.encrypt(
-                    { name: 'AES-GCM', iv: targetIv },
-                    targetKek,
-                    dekRaw
-                );
-
-                encryptionInfo[encryptionKey] = {
-                    encryptedDek_base64: this.arrayBufferToBase64(targetWrappedDek),
-                    salt_base64: this.arrayBufferToBase64(targetSalt),
-                    iv_base64: this.arrayBufferToBase64(targetIv),
-                    kdfIterations: this.KDF_ITERATIONS
-                };
-                
-                console.log(`✅ Encryption completed for ${target}`);
-            }
-
             const result = {
                 encryptedContent_base64: this.arrayBufferToBase64(encryptedContent),
-                data_iv_base64: this.arrayBufferToBase64(dataIv),
-                encryptionInfo: encryptionInfo,
-                targets: targets
+                data_iv_base64: this.arrayBufferToBase64(iv),
+                salt_base64: this.arrayBufferToBase64(salt),
+                encryptionInfo: {
+                    method: 'single_timeline',
+                    kdfIterations: this.KDF_ITERATIONS
+                }
             };
 
-            console.log('✅ Entry encryption completed successfully');
-            console.log('🔐 Encryption info keys:', Object.keys(encryptionInfo));
-            
+            console.log('✅ Single timeline entry encrypted successfully');
             return result;
         } catch (error) {
-            console.error('❌ Entry encryption failed:', error);
+            console.error('❌ Single timeline entry encryption failed:', error);
             throw new Error(`Entry encryption failed: ${error.message}`);
         }
     }
 
-    // IMPROVED: Entry decryption with better logging
-    async decryptEntry(entry, password) {
+    // NEW: Simple single-timeline entry decryption
+    async decryptSingleTimelineEntry(encryptedEntry, timelinePassword) {
         try {
-            console.log('🔓 Attempting to decrypt entry with password length:', password?.length || 0);
+            console.log('🔓 Decrypting single timeline entry...');
+            
+            if (!timelinePassword) {
+                console.warn('❌ No timeline password provided');
+                return null;
+            }
+
+            // Handle both new format (with salt_base64) and old format (without)
+            let salt, iv, encryptedContent;
+            
+            if (encryptedEntry.salt_base64) {
+                // New single-timeline format
+                salt = this.base64ToArrayBuffer(encryptedEntry.salt_base64);
+                iv = this.base64ToArrayBuffer(encryptedEntry.data_iv_base64);
+                encryptedContent = this.base64ToArrayBuffer(encryptedEntry.encryptedContent_base64);
+            } else {
+                // Try to handle old format gracefully
+                console.log('🔄 Attempting to decrypt old format entry...');
+                return await this.decryptEntry(encryptedEntry, timelinePassword);
+            }
+
+            // Derive key from timeline password
+            const key = await this.deriveKeyFromPassword(timelinePassword, salt);
+
+            // Decrypt content
+            const decryptedBuffer = await window.crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encryptedContent
+            );
+
+            const decoder = new TextDecoder();
+            const content = JSON.parse(decoder.decode(decryptedBuffer));
+
+            console.log('✅ Single timeline entry decrypted successfully');
+            
+            return {
+                content: content,
+                decryptedBy: 'single_timeline',
+                timestamp: encryptedEntry.timestamp,
+                targetTimelines: encryptedEntry.targetTimelines || []
+            };
+        } catch (error) {
+            console.error('❌ Single timeline entry decryption failed:', error);
+            return null;
+        }
+    }
+
+    // UPDATED: Main entry encryption method - now creates individual timeline entries
+    async encryptEntry(content, targets, parentPassword, kidPasswords) {
+        console.log('🔐 NEW: Creating individual timeline entries instead of multi-recipient');
+        console.log('🎯 Targets:', targets);
+        console.log('🔑 Available kid passwords:', Object.keys(kidPasswords || {}));
+
+        // Validate inputs
+        if (!parentPassword) {
+            throw new Error('Parent password is required');
+        }
+        if (!targets || targets.length === 0) {
+            throw new Error('At least one target is required');
+        }
+
+        // Return array of encrypted entries (one per target)
+        const encryptedEntries = [];
+
+        for (const target of targets) {
+            let targetPassword;
+            let targetTimeline;
+
+            console.log(`🔐 Processing target: ${target}`);
+
+            if (target === 'general') {
+                targetPassword = parentPassword;
+                targetTimeline = 'general';
+                console.log('📝 Using parent password for general timeline');
+            } else if (target.startsWith('kid')) {
+                const kidId = parseInt(target.replace('kid', ''));
+                console.log(`👶 Kid target detected: ID ${kidId}`);
+                
+                if (!kidPasswords) {
+                    console.error('❌ Kid passwords object is null/undefined');
+                    throw new Error(`Kid passwords not available for encryption`);
+                }
+                
+                targetPassword = kidPasswords[kidId];
+                targetTimeline = target;
+                
+                console.log(`🔑 Kid ${kidId} password lookup:`, {
+                    passwordExists: !!targetPassword,
+                    passwordLength: targetPassword ? targetPassword.length : 0
+                });
+            } else {
+                console.warn(`❓ Unknown target type: ${target}`);
+                continue;
+            }
+
+            // Validate password exists
+            if (!targetPassword) {
+                const errorMsg = `No password available for target: ${target}`;
+                console.error(`❌ ${errorMsg}`);
+                throw new Error(errorMsg);
+            }
+
+            console.log(`🔐 Encrypting entry for ${target} with password length: ${targetPassword.length}`);
+
+            // Encrypt content for this specific timeline
+            const encryptedEntry = await this.encryptSingleTimelineEntry(content, targetPassword);
+            
+            // Add target information
+            encryptedEntry.targets = [target];
+            encryptedEntry.targetTimelines = [targetTimeline];
+
+            encryptedEntries.push({
+                target: target,
+                timeline: targetTimeline,
+                ...encryptedEntry
+            });
+            
+            console.log(`✅ Encryption completed for ${target}`);
+        }
+
+        console.log('✅ All timeline entries encrypted successfully');
+        console.log('🔐 Created entries for timelines:', encryptedEntries.map(e => e.timeline));
+        
+        return encryptedEntries;
+    }
+
+    // UPDATED: Main entry decryption method - handles both old and new formats
+    async decryptEntry(entry, password) {
+        console.log('🔓 Attempting to decrypt entry...');
+        
+        // First try new single-timeline format
+        if (entry.encryptionInfo?.method === 'single_timeline' || entry.salt_base64) {
+            return await this.decryptSingleTimelineEntry(entry, password);
+        }
+        
+        // Fall back to original complex decryption for old entries
+        console.log('🔄 Attempting old format decryption...');
+        return await this.decryptEntryLegacy(entry, password);
+    }
+
+    // LEGACY: Keep old decryption method for existing entries
+    async decryptEntryLegacy(entry, password) {
+        try {
+            console.log('🔓 Using legacy decryption method...');
             
             if (!password) {
                 console.warn('❌ No password provided for decryption');
@@ -346,7 +363,7 @@ export class CryptoManager {
             let dekRaw = null;
             let decryptedBy = null;
 
-            // Try to decrypt DEK with the provided password against each encryption entry
+            // Try to decrypt DEK with the provided password
             for (const [keyHolder, info] of Object.entries(encryptionInfo)) {
                 try {
                     console.log(`🔓 Trying to decrypt DEK using ${keyHolder} encryption...`);
@@ -373,7 +390,7 @@ export class CryptoManager {
 
             if (!dekRaw) {
                 console.warn('❌ Password does not match any encryption key in this entry');
-                return null; // Password doesn't match any encryption key
+                return null;
             }
 
             // Import DEK
@@ -398,7 +415,7 @@ export class CryptoManager {
             const decoder = new TextDecoder();
             const content = JSON.parse(decoder.decode(decryptedBuffer));
 
-            console.log('✅ Entry content decrypted successfully');
+            console.log('✅ Legacy entry content decrypted successfully');
             
             return {
                 content: content,
@@ -407,7 +424,7 @@ export class CryptoManager {
                 targetTimelines: entry.targetTimelines || entry.targets || []
             };
         } catch (error) {
-            console.error('❌ Entry decryption failed:', error);
+            console.error('❌ Legacy entry decryption failed:', error);
             return null;
         }
     }
@@ -432,11 +449,10 @@ export class CryptoManager {
             score,
             strength,
             requirements,
-            isValid: score >= 3 // Require at least 3 criteria
+            isValid: score >= 3
         };
     }
 
-    // Generate secure password
     generateSecurePassword(length = 16) {
         const lowercase = 'abcdefghijklmnopqrstuvwxyz';
         const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -444,23 +460,19 @@ export class CryptoManager {
         const symbols = '!@#$%^&*()_+-=[]{}|;:,.<>?';
         const allChars = lowercase + uppercase + numbers + symbols;
 
-        // Ensure at least one character from each category
         let password = '';
         password += lowercase[Math.floor(Math.random() * lowercase.length)];
         password += uppercase[Math.floor(Math.random() * uppercase.length)];
         password += numbers[Math.floor(Math.random() * numbers.length)];
         password += symbols[Math.floor(Math.random() * symbols.length)];
 
-        // Fill remaining length with random characters
         for (let i = password.length; i < length; i++) {
             password += allChars[Math.floor(Math.random() * allChars.length)];
         }
 
-        // Shuffle the password
         return password.split('').sort(() => 0.5 - Math.random()).join('');
     }
 
-    // Hash functions (for verification, not storage)
     async hashPassword(password) {
         const encoder = new TextEncoder();
         const data = encoder.encode(password);
@@ -468,49 +480,16 @@ export class CryptoManager {
         return this.arrayBufferToBase64(hashBuffer);
     }
 
-    // Secure comparison
     async verifyPassword(password, expectedHash) {
         const passwordHash = await this.hashPassword(password);
         return passwordHash === expectedHash;
     }
 
-    // Key derivation for master password (for future use)
-    async deriveMasterKey(password, salt) {
-        const encoder = new TextEncoder();
-        const keyMaterial = await window.crypto.subtle.importKey(
-            'raw',
-            encoder.encode(password),
-            'PBKDF2',
-            false,
-            ['deriveKey']
-        );
-
-        return window.crypto.subtle.deriveKey(
-            {
-                name: 'PBKDF2',
-                salt: salt,
-                iterations: this.KDF_ITERATIONS,
-                hash: 'SHA-256'
-            },
-            keyMaterial,
-            {
-                name: 'AES-GCM',
-                length: 256
-            },
-            false,
-            ['encrypt', 'decrypt']
-        );
-    }
-
-    // Utility method to check if crypto is available
     static isSupported() {
         return !!(window.crypto && window.crypto.subtle);
     }
 
-    // Clean up sensitive data from memory (best effort)
     clearSensitiveData() {
-        // In JavaScript, we can't truly clear memory, but we can overwrite variables
-        // This is more of a symbolic gesture for security awareness
         console.log('🧹 Clearing sensitive data from memory');
     }
 }
