@@ -1,7 +1,7 @@
 /**
- * Main Application Entry Point - PHASE 1 COMPLETE
+ * Main Application Entry Point - FIXED DATABASE FORMAT
  * Orchestrates modules and initializes the Family Timeline app
- * UPDATED: Timeline-specific entry creation, better password UX
+ * FIXED: Proper timeline-per-entry database storage
  */
 
 import { AppState } from './modules/state.js';
@@ -170,12 +170,10 @@ class FamilyTimelineApp {
         });
     }
 
-    // UPDATED: Timeline listeners with submit button (Phase 1 fix)
     setupTimelineListeners() {
         const viewerPassword = document.getElementById('viewerPassword');
         const loadTimelineBtn = document.getElementById('loadTimelineBtn');
 
-        // FIXED: Submit button approach instead of input listener
         if (loadTimelineBtn) {
             loadTimelineBtn.addEventListener('click', async () => {
                 const password = viewerPassword.value;
@@ -187,7 +185,6 @@ class FamilyTimelineApp {
             });
         }
 
-        // Enter key support
         if (viewerPassword) {
             viewerPassword.addEventListener('keydown', async (e) => {
                 if (e.key === 'Enter') {
@@ -411,132 +408,190 @@ class FamilyTimelineApp {
         }
     }
 
-    // UPDATED: Phase 1 - Creates multiple timeline entries
-    async handleCreateEntry() {
-        console.log('📝 Creating individual entries per timeline (Phase 1)');
-        
-        try {
-            const text = document.getElementById('entryText').value;
-            const imageFile = document.getElementById('imageInput').files[0];
-            const audioFile = document.getElementById('audioInput').files[0];
-            const targets = Array.from(document.querySelectorAll('input[name="target"]:checked'))
-                .map(cb => cb.value);
+    // FIXED: Proper timeline-per-entry creation
+// REPLACE your handleCreateEntry method in main.js with this debug version:
 
-            console.log('📝 Targets selected:', targets);
-            console.log('🔑 Available kid password IDs in session:', Object.keys(this.state.parentSession.kidPasswords));
+async handleCreateEntry() {
+    console.log('📝 Creating individual entries per timeline (DEBUG VERSION)');
+    
+    try {
+        const text = document.getElementById('entryText').value;
+        const imageFile = document.getElementById('imageInput').files[0];
+        const audioFile = document.getElementById('audioInput').files[0];
+        const targets = Array.from(document.querySelectorAll('input[name="target"]:checked'))
+            .map(cb => cb.value);
 
-            if (!text && !imageFile && !audioFile) {
-                showStatus('Please provide some content for the entry', 'error');
-                return;
-            }
-            if (targets.length === 0) {
-                showStatus('Please select at least one timeline', 'error');
-                return;
-            }
+        console.log('📝 Targets selected:', targets);
 
-            const kidTargets = targets.filter(t => t.startsWith('kid'));
-            const missingPasswords = kidTargets.filter(target => {
+        if (!text && !imageFile && !audioFile) {
+            showStatus('Please provide some content for the entry', 'error');
+            return;
+        }
+        if (targets.length === 0) {
+            showStatus('Please select at least one timeline', 'error');
+            return;
+        }
+
+        const content = { text };
+        if (imageFile) content.image = await this.crypto.fileToBase64(imageFile);
+        if (audioFile) content.audio = await this.crypto.fileToBase64(audioFile);
+
+        console.log('🔐 Starting encryption for targets:', targets);
+
+        // Process each target individually
+        const entryIds = [];
+        const baseTimestamp = new Date().toISOString();
+
+        for (const target of targets) {
+            let targetPassword;
+            let timelineName;
+
+            console.log(`🎯 Processing target: ${target}`);
+
+            if (target === 'general') {
+                targetPassword = this.state.parentSession.password;
+                timelineName = this.state.settings.generalTimelineName || 'Family Timeline';
+            } else if (target.startsWith('kid')) {
                 const kidId = parseInt(target.replace('kid', ''));
-                const hasPassword = !!this.state.parentSession.kidPasswords[kidId];
-                console.log(`Checking target ${target} (kidId: ${kidId}): Password in session? ${hasPassword}`);
-                return !hasPassword;
-            });
-
-            if (missingPasswords.length > 0) {
-                const missingNames = missingPasswords.map(target => {
-                    const kidId = parseInt(target.replace('kid', ''));
-                    const kid = this.state.kids.find(k => k.id === kidId);
-                    return kid ? kid.name : `Kid ${kidId}`;
-                }).join(', ');
-                
-                showStatus(
-                    `Cannot create entry: Missing passwords for ${missingNames}. ` +
-                    `Please set/update their passwords in Kids Management, or re-login if issue persists.`, 
-                    'error',
-                    8000
-                );
-                return;
+                targetPassword = this.state.parentSession.kidPasswords[kidId];
+                const kid = this.state.kids.find(k => k.id === kidId);
+                timelineName = kid ? `${kid.name}'s Timeline` : `Kid ${kidId} Timeline`;
+            } else {
+                console.warn(`❓ Unknown target type: ${target}`);
+                continue;
             }
 
-            const content = { text };
-            if (imageFile) content.image = await this.crypto.fileToBase64(imageFile);
-            if (audioFile) content.audio = await this.crypto.fileToBase64(audioFile);
+            if (!targetPassword) {
+                console.error(`❌ No password available for target: ${target}`);
+                continue;
+            }
 
-            // NEW: Get array of encrypted entries (one per timeline)
-            const encryptedEntries = await this.crypto.encryptEntry(
-                content,
-                targets,
-                this.state.parentSession.password,
-                this.state.parentSession.kidPasswords
-            );
+            console.log(`🔐 Encrypting for ${target} with password length: ${targetPassword.length}`);
 
-            console.log(`📝 Created ${encryptedEntries.length} encrypted entries for ${targets.length} targets`);
-
-            // NEW: Store each entry separately in the database
-            const entryIds = [];
-            for (const encryptedEntry of encryptedEntries) {
-                console.log(`💾 Storing entry for timeline: ${encryptedEntry.timeline}`);
+            try {
+                // Step 1: Encrypt the content
+                console.log('🔧 Step 1: Calling encryptSingleTimelineEntry...');
+                const encryptedEntry = await this.crypto.encryptSingleTimelineEntry(content, targetPassword);
                 
-                // Create entry data compatible with existing database structure
-                const entryData = {
-                    targets: encryptedEntry.targets, // Single target now
+                console.log('🔧 Step 2: Encryption result:', {
+                    hasEncryptedContent: !!encryptedEntry.encryptedContent_base64,
+                    hasIv: !!encryptedEntry.data_iv_base64,
+                    hasSalt: !!encryptedEntry.salt_base64,
+                    saltLength: encryptedEntry.salt_base64 ? encryptedEntry.salt_base64.length : 'MISSING'
+                });
+                
+                // Step 2: Create database entry structure
+                console.log('🔧 Step 3: Creating database entry structure...');
+                const dbEntryData = {
+                    // CRITICAL: Copy all encrypted fields
                     encryptedContent_base64: encryptedEntry.encryptedContent_base64,
                     data_iv_base64: encryptedEntry.data_iv_base64,
-                    encryptionInfo: encryptedEntry.encryptionInfo,
-                    // NEW: Add salt for new entries
-                    salt_base64: encryptedEntry.salt_base64,
-                    timeline: encryptedEntry.timeline // Track which timeline this belongs to
+                    salt_base64: encryptedEntry.salt_base64, // ← MUST be here!
+                    
+                    // Timeline metadata  
+                    targets: [target],
+                    targetTimelines: [target],
+                    timeline: target,
+                    timelineName: timelineName,
+                    
+                    // Entry metadata
+                    timestamp: baseTimestamp,
+                    
+                    // Format identification
+                    encryptionInfo: {
+                        method: 'single_timeline',
+                        kdfIterations: this.crypto.KDF_ITERATIONS,
+                        version: 2
+                    }
                 };
 
-                const entryId = await this.db.createEntry(entryData);
+                console.log('🔧 Step 4: Final database entry to store:', {
+                    hasEncryptedContent: !!dbEntryData.encryptedContent_base64,
+                    hasIv: !!dbEntryData.data_iv_base64,
+                    hasSalt: !!dbEntryData.salt_base64,
+                    saltValue: dbEntryData.salt_base64 ? dbEntryData.salt_base64.substring(0, 10) + '...' : 'MISSING!',
+                    allKeys: Object.keys(dbEntryData)
+                });
+
+                // Step 3: Store in database
+                console.log('🔧 Step 5: Storing in database...');
+                const entryId = await this.db.createEntry(dbEntryData);
                 entryIds.push(entryId);
-                console.log(`✅ Entry stored for ${encryptedEntry.timeline}: ID ${entryId}`);
+                
+                console.log(`✅ Entry stored for ${timelineName}: ID ${entryId}`);
+                
+                // Step 4: Verify storage by reading back
+                console.log('🔧 Step 6: Verifying storage...');
+                const storedEntry = await this.db.getEntry(entryId);
+                console.log('🔧 Stored entry verification:', {
+                    entryId: storedEntry.id,
+                    hasEncryptedContent: !!storedEntry.encryptedContent_base64,
+                    hasIv: !!storedEntry.data_iv_base64,
+                    hasSalt: !!storedEntry.salt_base64,
+                    saltInDb: storedEntry.salt_base64 ? 'YES' : 'NO - MISSING!',
+                    allKeysInDb: Object.keys(storedEntry)
+                });
+                
+            } catch (error) {
+                console.error(`❌ Failed to create entry for ${target}:`, error);
             }
-
-            // Clear form
-            document.getElementById('entryForm').reset();
-            document.querySelectorAll('input[name="target"]').forEach(cb => cb.checked = false);
-            this.ui.updateCreateButtonState();
-
-            // Updated success message
-            const timelineNames = targets.map(target => {
-                if (target === 'general') return this.state.settings.generalTimelineName || 'Family Timeline';
-                if (target.startsWith('kid')) {
-                    const kidId = parseInt(target.replace('kid', ''));
-                    const kid = this.state.kids.find(k => k.id === kidId);
-                    return kid ? `${kid.name}'s Timeline` : target;
-                }
-                return target;
-            }).join(', ');
-
-            showStatus(`Entry created for: ${timelineNames} (${entryIds.length} entries stored)`, 'success');
-            
-        } catch (error) {
-            console.error('Create entry error:', error);
-            showStatus('Failed to create entry: ' + error.message, 'error');
         }
+
+        if (entryIds.length === 0) {
+            showStatus('Failed to create any entries. Check console for details.', 'error');
+            return;
+        }
+
+        // Clear form
+        document.getElementById('entryForm').reset();
+        document.querySelectorAll('input[name="target"]').forEach(cb => cb.checked = false);
+        this.ui.updateCreateButtonState();
+
+        showStatus(`Entry created successfully! Check console for debug info.`, 'success');
+        
+    } catch (error) {
+        console.error('Create entry error:', error);
+        showStatus('Failed to create entry: ' + error.message, 'error');
     }
+}
 
     async handleLoadTimeline(password) {
         try {
+            console.log('📚 Loading timeline with password length:', password.length);
+            
             const entries = await this.db.getEntries();
+            console.log(`📊 Found ${entries.length} total entries in database`);
+            
             const accessibleEntries = [];
 
             for (const entry of entries) {
                 try {
+                    console.log(`🔓 Attempting to decrypt entry ID ${entry.id}`);
                     const decryptedContent = await this.crypto.decryptEntry(entry, password);
                     if (decryptedContent) {
+                        console.log(`✅ Successfully decrypted entry ID ${entry.id}`);
                         accessibleEntries.push({
                             ...entry,
                             decryptedContent
                         });
+                    } else {
+                        console.log(`❌ Could not decrypt entry ID ${entry.id}`);
                     }
                 } catch (error) {
-                    console.warn(`Could not decrypt entry ID ${entry.id} with the provided password.`, error.message);
+                    console.warn(`Could not decrypt entry ID ${entry.id}:`, error.message);
                     continue;
                 }
             }
+            
+            console.log(`📋 Displaying ${accessibleEntries.length} accessible entries`);
             this.ui.displayTimelineEntries(accessibleEntries);
+            
+            if (accessibleEntries.length === 0) {
+                showStatus('No entries found with this password. Try a different password or create some entries first.', 'warning');
+            } else {
+                showStatus(`Loaded ${accessibleEntries.length} entries`, 'success');
+            }
+            
         } catch (error) {
             console.error('Load timeline error:', error);
             showStatus('Failed to load timeline: ' + error.message, 'error');
@@ -622,117 +677,6 @@ class FamilyTimelineApp {
         
         return successCount;
     }
-
-    // NEW: Phase 1 - Timeline export helper
-    async exportTimelineData(timelineTarget) {
-        try {
-            if (!this.state.parentSession.active) {
-                showStatus('Please login as parent first', 'error');
-                return;
-            }
-            
-            console.log(`📦 Exporting timeline: ${timelineTarget}`);
-            
-            // Get all entries and filter for this timeline
-            const allEntries = await this.db.getEntries();
-            const timelineEntries = allEntries.filter(entry => {
-                // Support both old and new formats
-                if (entry.timeline === timelineTarget) return true;
-                if (entry.targets && entry.targets.includes(timelineTarget)) return true;
-                return false;
-            });
-            
-            console.log(`📊 Found ${timelineEntries.length} entries for ${timelineTarget}`);
-            
-            // Get the right password for this timeline
-            let password;
-            if (timelineTarget === 'general') {
-                password = this.state.parentSession.password;
-            } else if (timelineTarget.startsWith('kid')) {
-                const kidId = parseInt(timelineTarget.replace('kid', ''));
-                password = this.state.parentSession.kidPasswords[kidId];
-            }
-            
-            if (!password) {
-                showStatus(`No password available for ${timelineTarget}`, 'error');
-                return;
-            }
-            
-            // Decrypt entries
-            const decryptedEntries = [];
-            for (const entry of timelineEntries) {
-                try {
-                    const decrypted = await this.crypto.decryptEntry(entry, password);
-                    if (decrypted) {
-                        decryptedEntries.push({
-                            timestamp: entry.timestamp,
-                            content: decrypted.content,
-                            timeline: timelineTarget
-                        });
-                    }
-                } catch (error) {
-                    console.warn(`Skipping entry ${entry.id}: ${error.message}`);
-                }
-            }
-            
-            // Create export
-            const exportData = {
-                version: 2, // Phase 1 version
-                timeline: timelineTarget,
-                timelineName: this.getTimelineDisplayName(timelineTarget),
-                exportedAt: new Date().toISOString(),
-                entries: decryptedEntries,
-                metadata: {
-                    entryCount: decryptedEntries.length,
-                    exportType: 'timeline_specific',
-                    requiresPassword: 'This timeline export requires the specific timeline password to decrypt'
-                }
-            };
-            
-            // Download
-            const filename = `${timelineTarget}_export_${new Date().toISOString().split('T')[0]}.json`;
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            showStatus(`Exported ${decryptedEntries.length} entries for ${this.getTimelineDisplayName(timelineTarget)}`, 'success');
-            
-        } catch (error) {
-            console.error('Export failed:', error);
-            showStatus('Export failed: ' + error.message, 'error');
-        }
-    }
-
-    // NEW: Helper method for timeline display names
-    getTimelineDisplayName(timeline) {
-        if (timeline === 'general') {
-            return this.state.settings.generalTimelineName || 'Family Timeline';
-        }
-        if (timeline.startsWith('kid')) {
-            const kidId = parseInt(timeline.replace('kid', ''));
-            const kid = this.state.kids.find(k => k.id === kidId);
-            return kid ? `${kid.name}'s Timeline` : timeline;
-        }
-        return timeline;
-    }
-
-    // NEW: Helper method to get timeline password
-    getTimelinePassword(timeline) {
-        if (timeline === 'general') {
-            return this.state.parentSession.password;
-        }
-        if (timeline.startsWith('kid')) {
-            const kidId = parseInt(timeline.replace('kid', ''));
-            return this.state.parentSession.kidPasswords[kidId];
-        }
-        return null;
-    }
 }
 
 // Initialize app when DOM is loaded
@@ -753,46 +697,53 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('Full Session Kid Passwords object (for debugging - careful with actual passwords):', JSON.stringify(app.state.parentSession.kidPasswords));
     };
 
-    // NEW: Phase 1 Testing helpers
-    window.testPhase1 = async () => {
+    // FIXED: Clean database helper for fresh start
+    window.clearDatabase = async () => {
+        if (confirm('⚠️ This will DELETE ALL timeline entries and kids! Are you sure?')) {
+            if (confirm('🚨 LAST WARNING: This cannot be undone. Delete everything?')) {
+                try {
+                    await app.db.clearAllData();
+                    // Reset state
+                    app.state.setKids([]);
+                    app.state.endParentSession();
+                    app.ui.updateDisplay();
+                    showStatus('Database cleared successfully! You can start fresh.', 'success');
+                    console.log('✅ Database cleared - fresh start available');
+                } catch (error) {
+                    console.error('Failed to clear database:', error);
+                    showStatus('Failed to clear database: ' + error.message, 'error');
+                }
+            }
+        }
+    };
+
+    // Testing helper for new format
+    window.testNewFormat = async () => {
         if (!window.familyApp || !window.familyApp.state.parentSession.active) {
             console.log('❌ Please login as parent first');
             return;
         }
         
-        const content = { text: 'Test entry for Phase 1 - ' + new Date().toLocaleString() };
-        const targets = ['general']; // Change to ['kid1'] if you have kids
+        const content = { text: 'Test entry for NEW FORMAT - ' + new Date().toLocaleString() };
+        const password = 'testpassword123';
         
         try {
-            const encrypted = await window.familyApp.crypto.encryptEntry(
-                content,
-                targets,
-                window.familyApp.state.parentSession.password,
-                window.familyApp.state.parentSession.kidPasswords
-            );
+            console.log('🧪 Testing new single-timeline encryption...');
             
-            console.log('✅ Encryption test successful');
-            console.log('📊 Created entries:', encrypted.length);
+            const encrypted = await window.familyApp.crypto.encryptSingleTimelineEntry(content, password);
+            console.log('✅ Encryption successful:', encrypted);
             
-            // Test decryption
-            const decrypted = await window.familyApp.crypto.decryptEntry(
-                encrypted[0], 
-                window.familyApp.state.parentSession.password
-            );
+            const decrypted = await window.familyApp.crypto.decryptSingleTimelineEntry(encrypted, password);
+            console.log('✅ Decryption successful:', decrypted);
             
-            console.log('✅ Decryption test successful');
-            console.log('📝 Decrypted content:', decrypted.content);
+            if (decrypted.content.text === content.text) {
+                console.log('✅ Round-trip test PASSED');
+            } else {
+                console.log('❌ Round-trip test FAILED');
+            }
             
         } catch (error) {
             console.error('❌ Test failed:', error);
-        }
-    };
-
-    window.exportTimeline = (timeline = 'general') => {
-        if (window.familyApp && window.familyApp.exportTimelineData) {
-            window.familyApp.exportTimelineData(timeline);
-        } else {
-            console.log('❌ App not ready or method not available');
         }
     };
     
