@@ -1,6 +1,6 @@
 /**
- * UI Management
- * Handles all DOM manipulation and user interface updates
+ * Humanized UI Management - Shows Kid Names Instead of IDs
+ * Handles all DOM manipulation with human-friendly displays
  */
 
 import { showStatus } from '../utils/helpers.js';
@@ -9,20 +9,13 @@ export class UIManager {
     constructor() {
         this.elements = {};
         this.initialized = false;
-        // No appState is passed via constructor in your version,
-        // methods rely on window.familyApp.state
     }
 
     init() {
         try {
-            console.log('🎨 Initializing UI manager...'); // Corrected emoji if it was a display issue
-            
-            // Cache DOM elements
+            console.log('🎨 Initializing UI manager...');
             this.cacheElements();
-            
-            // Set up UI event listeners
             this.setupUIEventListeners();
-            
             this.initialized = true;
             console.log('✅ UI manager initialized');
         } catch (error) {
@@ -39,7 +32,7 @@ export class UIManager {
             switchModeBtn: '#switchModeBtn',
             
             // Menu sections
-            parentAuthSection: '#parentAuthSection', // Not used in updateSectionsVisibility directly by this name
+            parentAuthSection: '#parentAuthSection',
             parentLogin: '#parentLogin',
             parentSession: '#parentSession',
             kidsSection: '#kidsSection',
@@ -47,33 +40,67 @@ export class UIManager {
             // Forms
             parentNameInput: '#parentNameInput',
             timelineNameInput: '#timelineNameInput',
-            newKidName: '#newKidName', // Used for direct access if needed, not in a specific method here
+            newKidName: '#newKidName',
             
             // Content sections
             createSection: '#createSection',
             viewSection: '#viewSection',
-            targetSelection: '#targetSelection', // Container for checkboxes
+            adminSection: '#adminSection',
+            targetSelection: '#targetSelection',
             
             // Lists and containers
             kidsList: '#kidsList',
             timelineEntries: '#timelineEntries',
-            entryDetail: '#entryDetail', // For modal content
+            adminTimelineEntries: '#adminTimelineEntries',
+            entryDetail: '#entryDetail',
             
             // Form elements
             entryText: '#entryText',
             imageInput: '#imageInput',
             audioInput: '#audioInput',
             viewerPassword: '#viewerPassword',
-            createEntryBtn: '#createEntryBtn'
-            // Add other elements like closeModal, entryModal if managed here
+            createEntryBtn: '#createEntryBtn',
+            entryDateTime: '#entryDateTime'
         };
 
         for (const [key, selector] of Object.entries(selectors)) {
             this.elements[key] = document.querySelector(selector);
-            if (!this.elements[key] && key !== 'statusMessage' && key !== 'modeIndicator' && key !== 'parentAuthSection') { // Adjusted warning
+            if (!this.elements[key] && key !== 'statusMessage' && key !== 'modeIndicator' && key !== 'parentAuthSection') {
                 console.warn(`UI Element not found during cache: ${selector} (key: ${key})`);
             }
         }
+    }
+
+    // HUMANIZED: Helper function to convert kidId to name
+    kidIdToName(kidId) {
+        if (!window.familyApp || !window.familyApp.state) return kidId;
+        
+        if (kidId === 'general') return 'General Timeline';
+        if (kidId === 'parent') return window.familyApp.state.settings.parentName || 'Parent';
+        
+        if (typeof kidId === 'string' && kidId.startsWith('kid')) {
+            const numericId = parseInt(kidId.replace('kid', ''));
+            const kid = window.familyApp.state.kids.find(k => k.id === numericId);
+            return kid ? kid.name : kidId;
+        }
+        
+        return kidId;
+    }
+
+    // HUMANIZED: Convert array of kidIds to human-readable names
+    formatTargetNames(targets) {
+        if (!targets || !Array.isArray(targets)) return '';
+        
+        return targets.map(target => {
+            if (target === 'general') {
+                const generalName = window.familyApp?.state?.settings?.generalTimelineName || 'Family Timeline';
+                return generalName;
+            } else if (target.startsWith('kid')) {
+                const kidName = this.kidIdToName(target);
+                return kidName === target ? target : kidName; // Fallback to kidId if name not found
+            }
+            return target;
+        }).join(', ');
     }
 
     setupUIEventListeners() {
@@ -96,12 +123,18 @@ export class UIManager {
                 this.updateCreateButtonState();
             });
         }
-        
-        // Example: If modal close button is part of general UI managed here
-        const closeModalBtn = document.getElementById('closeModal'); // Assuming ID
-        const entryModalElement = document.getElementById('entryModal'); // Assuming ID
-        if (closeModalBtn && entryModalElement) {
-            closeModalBtn.addEventListener('click', () => entryModalElement.classList.add('hidden'));
+
+        // Admin timeline entry clicks
+        if (this.elements.adminTimelineEntries) {
+            this.elements.adminTimelineEntries.addEventListener('click', (e) => {
+                const timelineEntry = e.target.closest('timeline-entry');
+                if (timelineEntry) {
+                    const entryId = timelineEntry.getAttribute('entry-id');
+                    if (entryId) {
+                        this.handleAdminEntryClick(parseInt(entryId));
+                    }
+                }
+            });
         }
     }
 
@@ -116,14 +149,12 @@ export class UIManager {
         
         this.updateModeDisplay(state);
         this.updateAuthDisplay(state);
-        this.updateSectionsVisibility(state); // This will call updateKidsDisplay implicitly if structure demands
-        this.updateSettingsDisplay(); // Uses window.familyApp.state internally
-        this.updateCreateButtonState(); // Uses window.familyApp.state internally
-        // this.updateKidsDisplay(); // Call explicitly if not covered by updateSectionsVisibility logic
-        // this.updateTargetSelection(); // Call explicitly if needed at this stage
+        this.updateSectionsVisibility(state);
+        this.updateSettingsDisplay();
+        this.updateCreateButtonState();
     }
 
-    updateModeDisplay(state) { // state is passed
+    updateModeDisplay(state) {
         const modeText = state.mode === 'parent' ? 'Parent Mode' : 'Kid Mode';
         
         if (this.elements.modeIndicator) {
@@ -136,7 +167,7 @@ export class UIManager {
         }
     }
 
-    updateAuthDisplay(state) { // state is passed
+    updateAuthDisplay(state) {
         if (!this.elements.parentLogin || !this.elements.parentSession) return;
 
         if (state.parentSession.active) {
@@ -148,40 +179,39 @@ export class UIManager {
         }
     }
 
-    updateSectionsVisibility(state) { // state is passed
+    updateSectionsVisibility(state) {
         const isParentMode = state.mode === 'parent';
         const isLoggedIn = state.parentSession.active;
 
-        // Main content sections based on mode
-        const parentModeContent = document.getElementById('parentModeContent');
-        const kidModeContent = document.getElementById('kidModeContent');
-
-        if(parentModeContent) parentModeContent.classList.toggle('hidden', !isParentMode);
-        if(kidModeContent) kidModeContent.classList.toggle('hidden', isParentMode);
-
+        // Admin section visibility
+        if (this.elements.adminSection) {
+            const showAdmin = isParentMode && isLoggedIn;
+            this.elements.adminSection.classList.toggle('hidden', !showAdmin);
+        }
 
         // Sections within Parent Mode, visibility based on login status
         if (isParentMode) {
-            const authSect = document.getElementById('authSection'); // Re-query if not cached or if needed
+            const authSect = document.getElementById('authSection');
             if(authSect) authSect.classList.toggle('hidden', isLoggedIn);
 
             if (this.elements.kidsSection) {
                 this.elements.kidsSection.classList.toggle('hidden', !isLoggedIn);
-                if (isLoggedIn) this.updateKidsDisplay(); // Update kids list when section is visible
+                if (isLoggedIn) this.updateKidsDisplay();
             }
             if (this.elements.createSection) {
                 this.elements.createSection.classList.toggle('hidden', !isLoggedIn);
-                if (isLoggedIn) this.updateTargetSelection(); // Update targets when section is visible
+                if (isLoggedIn) this.updateTargetSelection();
             }
-            const settingsSect = document.getElementById('settingsSection'); // Assuming ID
+            const settingsSect = document.getElementById('settingsSection');
              if(settingsSect) settingsSect.classList.toggle('hidden', !isLoggedIn);
 
-            const logoutBtn = document.getElementById('logoutBtn'); // Assuming ID
+            const logoutBtn = document.getElementById('logoutBtn');
             if(logoutBtn) logoutBtn.classList.toggle('hidden', !isLoggedIn);
 
-        } else { // Kid Mode - hide parent-specific sections if they aren't already
+        } else { // Kid Mode - hide parent-specific sections
             if (this.elements.kidsSection) this.elements.kidsSection.classList.add('hidden');
             if (this.elements.createSection) this.elements.createSection.classList.add('hidden');
+            if (this.elements.adminSection) this.elements.adminSection.classList.add('hidden');
             const settingsSect = document.getElementById('settingsSection');
             if(settingsSect) settingsSect.classList.add('hidden');
             const logoutBtn = document.getElementById('logoutBtn');
@@ -190,11 +220,9 @@ export class UIManager {
             if(authSect) authSect.classList.add('hidden');
         }
 
-
-        // View section (timeline viewer) is generally always potentially visible
-        // Its content changes based on password input.
+        // View section is always visible
         if (this.elements.viewSection) {
-            this.elements.viewSection.classList.remove('hidden'); // Or manage its overall visibility differently
+            this.elements.viewSection.classList.remove('hidden');
         }
     }
 
@@ -206,15 +234,14 @@ export class UIManager {
         
         const settings = window.familyApp.state.settings;
         
-        if (this.elements.parentNameInput && settings.parentName !== undefined) { // Check for undefined
+        if (this.elements.parentNameInput && settings.parentName !== undefined) {
             this.elements.parentNameInput.value = settings.parentName;
         }
 
-        if (this.elements.timelineNameInput && settings.generalTimelineName !== undefined) { // Check for undefined
+        if (this.elements.timelineNameInput && settings.generalTimelineName !== undefined) {
             this.elements.timelineNameInput.value = settings.generalTimelineName;
         }
         
-        // Update displays for parent name and timeline name (if you have them)
         document.querySelectorAll('.parent-name-display').forEach(el => el.textContent = settings.parentName || 'Parent');
         document.querySelectorAll('.general-timeline-name-display').forEach(el => el.textContent = settings.generalTimelineName || 'Family Timeline');
     }
@@ -228,13 +255,13 @@ export class UIManager {
 
         const state = window.familyApp.state;
         const kids = state.kids;
-        const parentSessionActive = state.parentSession.active; // Get parent session status
+        const parentSessionActive = state.parentSession.active;
 
         console.log('🎨 Updating kids display. Parent session active:', parentSessionActive, 'Session passwords for kid IDs:', Object.keys(state.parentSession.kidPasswords || {}));
 
-        this.elements.kidsList.innerHTML = ''; // Clear existing
+        this.elements.kidsList.innerHTML = '';
 
-        const kidsNoKidsMsg = document.getElementById('kidsNoKids'); // Assuming this ID exists for the message
+        const kidsNoKidsMsg = document.getElementById('kidsNoKids');
 
         if (kids.length === 0) {
             if (kidsNoKidsMsg) {
@@ -249,27 +276,20 @@ export class UIManager {
         }
         if (kidsNoKidsMsg) kidsNoKidsMsg.classList.add('hidden');
 
-
         kids.forEach(kid => {
-            // 'hasPassword' attribute on kid-card refers to whether a password was *ever set up* for the kid.
             const hasPasswordSetup = !!kid.encryptedPassword_base64;
-            // console.log(`🎨 Kid ${kid.name} (ID: ${kid.id}) has password setup: ${hasPasswordSetup}`); // Your original log line
             
             const kidCard = document.createElement('kid-card');
             kidCard.setAttribute('kid-id', kid.id.toString());
             kidCard.setAttribute('kid-name', kid.name);
             kidCard.setAttribute('has-password', hasPasswordSetup.toString());
             
-            // --- THIS IS THE KEY MODIFICATION ---
-            // Set the parent-mode attribute based on parent's login status
             if (parentSessionActive) {
                 kidCard.setAttribute('parent-mode', 'true');
             } else {
                 kidCard.setAttribute('parent-mode', 'false');
             }
-            // --- END OF KEY MODIFICATION ---
             console.log(`🎨 Kid ${kid.name} (ID: ${kid.id}) attributes set: has-password=${hasPasswordSetup}, parent-mode=${parentSessionActive}`);
-
 
             this.elements.kidsList.appendChild(kidCard);
         });
@@ -286,28 +306,25 @@ export class UIManager {
         const settings = state.settings;
         const sessionKidPasswords = state.parentSession.kidPasswords || {};
 
-
-        // Clear existing targets
-        this.elements.targetSelection.innerHTML = ''; // Simpler clear
-
-        // Create checkbox container (if you want to re-add .checkbox-group structure)
-        // const checkboxGroup = document.createElement('div');
-        // checkboxGroup.className = 'checkbox-group';
-        // this.elements.targetSelection.appendChild(checkboxGroup);
-        // For simplicity, appending directly to targetSelection
+        this.elements.targetSelection.innerHTML = '';
         
-        // Add general timeline option
-        const generalItem = this.createCheckboxItem('general', settings.generalTimelineName || 'Family Timeline', false); // Not disabled by default
+        // Add general timeline option - HUMANIZED: Show actual timeline name
+        const generalName = settings.generalTimelineName || 'Family Timeline';
+        const generalItem = this.createCheckboxItem('general', generalName, false);
         this.elements.targetSelection.appendChild(generalItem);
 
-        // Add kid timeline options
+        // Add kid timeline options - HUMANIZED: Show kid names
         kids.forEach(kid => {
-            if (kid.isActive) { // Only show active kids
+            if (kid.isActive) {
                 const kidPasswordInSession = !!sessionKidPasswords[kid.id];
                 const isDisabled = !kidPasswordInSession;
-                const title = isDisabled ? "Password not currently loaded for this kid. Parent should re-login or update this kid's password." : "";
-                // Value for checkbox is "kid" + numeric ID, e.g. "kid1"
-                const kidItem = this.createCheckboxItem(`kid${kid.id}`, `${kid.name}'s Timeline ${isDisabled ? '(🔒)' : ''}`, isDisabled, title);
+                const kidIdKey = `kid${kid.id}`;
+                
+                // HUMANIZED: Use kid's actual name instead of "kid1", "kid2"
+                const displayName = `${kid.name}'s Timeline${isDisabled ? ' (🔒)' : ''}`;
+                const title = isDisabled ? `Password not currently loaded for ${kid.name}. Parent should re-login or update this kid's password.` : "";
+                
+                const kidItem = this.createCheckboxItem(kidIdKey, displayName, isDisabled, title);
                 this.elements.targetSelection.appendChild(kidItem);
             }
         });
@@ -315,7 +332,7 @@ export class UIManager {
         this.updateCreateButtonState();
     }
 
-    createCheckboxItem(value, labelText, isDisabled = false, title = '') { // Added isDisabled and title
+    createCheckboxItem(value, labelText, isDisabled = false, title = '') {
         const item = document.createElement('div');
         item.className = 'checkbox-item';
 
@@ -328,15 +345,14 @@ export class UIManager {
             checkbox.disabled = true;
         }
         if (title) {
-            item.title = title; // Set title on the container div for better hover
+            item.title = title;
         }
-
 
         const labelEl = document.createElement('label');
         labelEl.setAttribute('for', `target-${value}`);
         labelEl.textContent = labelText;
         if(isDisabled) {
-            labelEl.style.opacity = "0.6"; // Visually indicate disabled
+            labelEl.style.opacity = "0.6";
         }
 
         checkbox.addEventListener('change', () => {
@@ -357,12 +373,7 @@ export class UIManager {
         const state = window.familyApp.state;
         const hasContent = this.hasEntryContent();
         const hasTargets = this.hasSelectedTargets();
-        
-        // canCreateEntries checks if parent is logged in and in parent mode.
-        // However, entry creation section visibility is already handled by updateSectionsVisibility.
-        // So, if this button is visible, we assume parent is logged in and in parent mode.
         const parentSessionActive = state.parentSession.active;
-
 
         const isEnabled = parentSessionActive && hasContent && hasTargets;
         
@@ -389,7 +400,6 @@ export class UIManager {
     }
 
     hasSelectedTargets() {
-        // Query within the specific container if targetSelection is accurate
         const targetContainer = this.elements.targetSelection || document;
         const checkboxes = targetContainer.querySelectorAll('input[name="target"]:checked');
         return checkboxes.length > 0;
@@ -399,7 +409,7 @@ export class UIManager {
         if (!this.elements.timelineEntries) return;
         this.elements.timelineEntries.innerHTML = '';
 
-        if (!entries || entries.length === 0) { // Added !entries check
+        if (!entries || entries.length === 0) {
             const placeholder = document.createElement('p');
             placeholder.className = 'placeholder-text';
             placeholder.textContent = 'No entries found with this password, or timeline is empty.';
@@ -408,16 +418,22 @@ export class UIManager {
         }
 
         entries.forEach(entry => {
-            // Ensure decryptedContent exists and has its own 'content' property
             if (entry.decryptedContent && entry.decryptedContent.content) {
                 const entryElement = document.createElement('timeline-entry');
-                // Pass the whole entry which includes original ID, timestamp, targets AND decryptedContent
                 entryElement.entryData = entry; 
-                // Attributes for simpler display if timeline-entry component uses them:
-                entryElement.setAttribute('entry-id', entry.id); // Assuming entry has an id from DB
+                entryElement.setAttribute('entry-id', entry.id);
                 entryElement.setAttribute('timestamp', entry.timestamp);
                 entryElement.setAttribute('preview-text', this.getEntryPreview(entry.decryptedContent));
-                entryElement.setAttribute('target-timelines', (entry.targetTimelines || []).join(', '));
+                
+                // HUMANIZED: Show names instead of kidIds
+                const humanizedTargets = this.formatTargetNames(entry.targetTimelines || []);
+                entryElement.setAttribute('target-timelines', humanizedTargets);
+                
+                const hasImage = !!(entry.decryptedContent.content.image);
+                const hasAudio = !!(entry.decryptedContent.content.audio);
+                entryElement.setAttribute('has-image', hasImage.toString());
+                entryElement.setAttribute('has-audio', hasAudio.toString());
+                
                 this.elements.timelineEntries.appendChild(entryElement);
             } else {
                 console.warn("Skipping entry in displayTimelineEntries, missing decryptedContent or its content sub-property:", entry);
@@ -425,10 +441,58 @@ export class UIManager {
         });
     }
 
-    getEntryPreview(decryptedContentObject) { // Parameter is the object containing 'content', 'decryptedBy' etc.
+    // Display admin entries with enhanced styling
+    displayAdminEntries(entries) {
+        if (!this.elements.adminTimelineEntries) return;
+        this.elements.adminTimelineEntries.innerHTML = '';
+
+        if (!entries || entries.length === 0) {
+            const placeholder = document.createElement('p');
+            placeholder.className = 'placeholder-text';
+            placeholder.textContent = 'No entries found or all entries are encrypted with different passwords.';
+            this.elements.adminTimelineEntries.appendChild(placeholder);
+            return;
+        }
+
+        console.log(`📋 Displaying ${entries.length} entries in admin view`);
+
+        entries.forEach(entry => {
+            if (entry.decryptedContent && entry.decryptedContent.content) {
+                const entryElement = document.createElement('timeline-entry');
+                entryElement.entryData = entry;
+                entryElement.setAttribute('entry-id', entry.id);
+                entryElement.setAttribute('timestamp', entry.timestamp);
+                entryElement.setAttribute('preview-text', this.getEntryPreview(entry.decryptedContent));
+                
+                // HUMANIZED: Enhanced admin display with names instead of IDs
+                const humanizedTargets = this.formatTargetNames(entry.targetTimelines || []);
+                const decryptedByName = this.getDecryptedByDisplayName(entry.decryptedContent.decryptedBy || 'unknown');
+                entryElement.setAttribute('target-timelines', `👥 ${humanizedTargets} | 🔑 ${decryptedByName}`);
+                
+                const hasImage = !!(entry.decryptedContent.content.image);
+                const hasAudio = !!(entry.decryptedContent.content.audio);
+                entryElement.setAttribute('has-image', hasImage.toString());
+                entryElement.setAttribute('has-audio', hasAudio.toString());
+                
+                // Add admin styling class
+                entryElement.classList.add('admin-entry');
+                
+                this.elements.adminTimelineEntries.appendChild(entryElement);
+            }
+        });
+    }
+
+    // Clear admin timeline
+    clearAdminTimeline() {
+        if (this.elements.adminTimelineEntries) {
+            this.elements.adminTimelineEntries.innerHTML = '<p class="placeholder-text">Admin view cleared.</p>';
+        }
+    }
+
+    getEntryPreview(decryptedContentObject) {
         if (!decryptedContentObject || !decryptedContentObject.content) return 'No preview available';
         
-        const entryMainContent = decryptedContentObject.content; // Actual content is here
+        const entryMainContent = decryptedContentObject.content;
         let preview = '';
         
         if (entryMainContent.text) {
@@ -450,24 +514,29 @@ export class UIManager {
         }
     }
 
-    showEntryModal(decryptedEntryData) { // Parameter is the object from decryptEntry
-        const modal = document.getElementById('entryModal'); // Assuming this ID exists
-        const modalContentTarget = document.getElementById('entryModalContent'); // Assuming this ID exists for content
+    showEntryModal(decryptedEntryData) {
+        const modal = document.getElementById('entryModal');
+        const modalContentTarget = document.getElementById('entryDetail');
 
         if (!modal || !modalContentTarget || !decryptedEntryData || !decryptedEntryData.content) {
              console.error("Modal elements or decrypted content not found for showEntryModal.", decryptedEntryData);
             return;
         }
         
-        const content = decryptedEntryData.content; // The actual text, image, audio data
+        const content = decryptedEntryData.content;
         let html = `<div class="modal-header"><h3>Entry Details</h3></div>`;
         html += `<div class="modal-body">`;
         html += `<p class="meta"><strong>Date:</strong> ${new Date(decryptedEntryData.timestamp).toLocaleString()}</p>`;
-        html += `<p class="meta"><strong>Targets:</strong> ${(decryptedEntryData.targetTimelines || []).join(', ')}</p>`;
-        html += `<p class="meta"><strong>Decrypted by:</strong> ${this.getDecryptedByDisplayName(decryptedEntryData.decryptedBy)}</p><hr class="modal-hr">`;
+        
+        // HUMANIZED: Show names instead of kidIds in modal
+        const humanizedTargets = this.formatTargetNames(decryptedEntryData.targetTimelines || []);
+        html += `<p class="meta"><strong>Targets:</strong> ${humanizedTargets}</p>`;
+        
+        const decryptedByName = this.getDecryptedByDisplayName(decryptedEntryData.decryptedBy);
+        html += `<p class="meta"><strong>Decrypted by:</strong> ${decryptedByName}</p><hr class="modal-hr">`;
         
         if (content.text) {
-            html += `<div class.modal-text-content"><p>${content.text.replace(/\n/g, '<br>')}</p></div>`;
+            html += `<div class="modal-text-content"><p>${content.text.replace(/\n/g, '<br>')}</p></div>`;
         }
         if (content.image && content.image.data_base64) {
             html += `<div class="modal-media"><img src="data:${content.image.type};base64,${content.image.data_base64}" alt="${content.image.name || 'Image content'}" style="max-width: 100%; height: auto; margin-top: 10px; border-radius: 4px;"></div>`;
@@ -475,13 +544,26 @@ export class UIManager {
         if (content.audio && content.audio.data_base64) {
             html += `<div class="modal-media"><audio controls src="data:${content.audio.type};base64,${content.audio.data_base64}" style="width: 100%; margin-top: 10px;"></audio></div>`;
         }
-        html += `</div>`; // End modal-body
+        html += `</div>`;
         
         modalContentTarget.innerHTML = html;
-        modal.classList.remove('hidden'); // Show the modal
-        modal.showModal ? modal.showModal() : modal.classList.remove('hidden'); // For <dialog> element
+        
+        if (typeof modal.show === 'function') {
+            modal.show();
+        } else {
+            modal.classList.remove('hidden');
+            modal.style.display = 'block';
+        }
     }
 
+    // Handle admin entry clicks
+    handleAdminEntryClick(entryId) {
+        if (window.familyApp && typeof window.familyApp.handleTimelineEntryClick === 'function') {
+            window.familyApp.handleTimelineEntryClick(entryId);
+        }
+    }
+
+    // HUMANIZED: Enhanced function to show names instead of kidIds
     getDecryptedByDisplayName(decryptedBy) {
         if (!window.familyApp || !window.familyApp.state) return decryptedBy;
         const state = window.familyApp.state;
@@ -490,7 +572,7 @@ export class UIManager {
             case 'parent':
                 return state.settings.parentName || 'Parent';
             case 'general':
-                return state.settings.generalTimelineName || 'General';
+                return state.settings.generalTimelineName || 'General Timeline';
             default:
                 if (typeof decryptedBy === 'string' && decryptedBy.startsWith('kid')) {
                     const kidId = parseInt(decryptedBy.replace('kid', ''));
@@ -501,15 +583,13 @@ export class UIManager {
         }
     }
 
-    handleFileSelection(event, type) { // type is 'image' or 'audio'
+    handleFileSelection(event, type) {
         const fileInput = event.target;
         const file = fileInput.files[0];
-        // Find the associated label, assuming a structure like <label class="file-input"><span>Choose..</span><input type="file"></label>
-        let feedbackLabel = fileInput.previousElementSibling; // If span is direct sibling
-        if (feedbackLabel && feedbackLabel.tagName !== 'SPAN') { // Or if label wraps input
-            feedbackLabel = fileInput.closest('label')?.querySelector('span.file-name-feedback'); // More specific
+        let feedbackLabel = fileInput.previousElementSibling;
+        if (feedbackLabel && feedbackLabel.tagName !== 'SPAN') {
+            feedbackLabel = fileInput.closest('label')?.querySelector('span.file-name-feedback');
         }
-
 
         if (!file) {
             if(feedbackLabel) feedbackLabel.textContent = feedbackLabel.dataset.defaultText || `Choose ${type}...`;
@@ -518,9 +598,9 @@ export class UIManager {
         }
         
         if (feedbackLabel) {
-            if(!feedbackLabel.dataset.defaultText) feedbackLabel.dataset.defaultText = feedbackLabel.textContent; // Store default
+            if(!feedbackLabel.dataset.defaultText) feedbackLabel.dataset.defaultText = feedbackLabel.textContent;
             feedbackLabel.textContent = `${file.name} (${this.formatFileSize(file.size)})`;
-            feedbackLabel.style.color = 'var(--primary-color)'; // Or your success color
+            feedbackLabel.style.color = 'var(--primary-color)';
         }
         this.updateCreateButtonState();
     }
@@ -534,7 +614,6 @@ export class UIManager {
     }
 
     showStatus(message, type = 'info', duration = 5000) {
-        // Uses the global showStatus from helpers.js
         showStatus(message, type, duration);
     }
 
@@ -542,12 +621,9 @@ export class UIManager {
     showError(message, duration = 5000) { this.showStatus(message, 'error', duration); }
     showWarning(message, duration = 4000) { this.showStatus(message, 'warning', duration); }
 
-    fadeIn(element, duration = 300) { /* ... your existing fadeIn ... */ }
-    fadeOut(element, duration = 300) { /* ... your existing fadeOut ... */ }
-
     cleanup() {
         this.elements = {};
         this.initialized = false;
-        console.log('🧹 UI manager cleaned up'); // Corrected emoji
+        console.log('🧹 UI manager cleaned up');
     }
 }

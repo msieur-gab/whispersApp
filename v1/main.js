@@ -1,6 +1,6 @@
 /**
- * Main Application Entry Point
- * Orchestrates modules and initializes the Family Timeline app
+ * Enhanced Main Application Entry Point
+ * Added: Parent Admin View & Message Backdating Features
  */
 
 import { AppState } from './modules/state.js';
@@ -19,7 +19,7 @@ class FamilyTimelineApp {
     constructor() {
         this.state = new AppState();
         this.crypto = new CryptoManager();
-        this.db = new DatabaseManager(this.crypto); // Pass crypto instance
+        this.db = new DatabaseManager(this.crypto);
         this.ui = new UIManager;
         this.initialized = false;
     }
@@ -27,8 +27,6 @@ class FamilyTimelineApp {
     async init() {
         try {
             console.log('🚀 Initializing Family Timeline App...');
-            // Assuming CryptoManager doesn't have an async init itself, or it's self-contained.
-            // await this.crypto.init(); // If it had one
             await this.db.init();
             await this.state.init();
             this.ui.init();
@@ -66,34 +64,46 @@ class FamilyTimelineApp {
         this.setupEntryListeners();
         this.setupTimelineListeners();
         this.setupStateListeners();
+        this.setupAdminListeners(); // NEW: Admin view listeners
+        this.setupDateTimeListeners(); // NEW: DateTime listeners
 
-// Listener for the new Import Button in the "View Timeline" section (Kid/General View)
-    const importViewButton = document.getElementById('importTimelineViewBtn');
-    importViewButton?.addEventListener('click', () => {
-        this.handleTriggerImportTimeline(); // Reuses the existing generic import handler
-    });
+        // Import/Export listeners
+        const importViewButton = document.getElementById('importTimelineViewBtn');
+        importViewButton?.addEventListener('click', () => {
+            this.handleTriggerImportTimeline();
+        });
 
-    // Listener for the new Import Button in the Parent Settings Panel
-    const importParentButton = document.getElementById('importTimelineParentBtn');
-    importParentButton?.addEventListener('click', () => {
-        this.handleTriggerImportTimeline(); // Also reuses the existing generic import handler
-    });
+        const importParentButton = document.getElementById('importTimelineParentBtn');
+        importParentButton?.addEventListener('click', () => {
+            this.handleTriggerImportTimeline();
+        });
+    }
 
-        // Example: If you add an import button with ID "importTimelineBtn_SETTINGS"
-        const importBtnSettings = document.getElementById('importTimelineBtn_SETTINGS');
-        importBtnSettings?.addEventListener('click', () => this.handleTriggerImportTimeline());
+    // NEW: Admin view event listeners
+    setupAdminListeners() {
+        const refreshAdminBtn = document.getElementById('refreshAdminView');
+        refreshAdminBtn?.addEventListener('click', () => {
+            this.handleRefreshAdminView();
+        });
 
-        // Export listeners might be better handled via event delegation if they are on dynamic kid cards
-        // For example, in setupKidsListeners:
-        // document.getElementById('kidsListContainer').addEventListener('click', (e) => {
-        //     if (e.target.classList.contains('export-kid-button')) {
-        //         const kidId = parseInt(e.target.dataset.kidId);
-        //         const kidName = e.target.dataset.kidName;
-        //         if (kidId && kidName) {
-        //            this.handleTriggerExportKidTimeline(kidId, kidName);
-        //         }
-        //     }
-        // });
+        const exportAllBtn = document.getElementById('exportAllData');
+        exportAllBtn?.addEventListener('click', () => {
+            this.handleExportAllData();
+        });
+    }
+
+    // NEW: DateTime event listeners
+    setupDateTimeListeners() {
+        const setCurrentTimeBtn = document.getElementById('setCurrentTime');
+        setCurrentTimeBtn?.addEventListener('click', () => {
+            this.handleSetCurrentTime();
+        });
+
+        // Set default datetime to current time when page loads
+        const datetimeInput = document.getElementById('entryDateTime');
+        if (datetimeInput) {
+            this.setDateTimeToNow(datetimeInput);
+        }
     }
 
     setupMenuListeners() {
@@ -129,16 +139,14 @@ class FamilyTimelineApp {
         const addKidBtn = document.getElementById('addKidBtn');
         addKidBtn?.addEventListener('click', () => this.handleAddKid());
 
-        // Event delegation for kid card actions
         document.addEventListener('kid-remove', (e) => {
             this.handleRemoveKid(e.detail.kidId);
         });
         document.addEventListener('kid-password-change', (e) => {
             this.handleChangeKidPassword(e.detail.kidId);
         });
-        // Example for export trigger from a kid card (assumes kid-card dispatches this event)
         document.addEventListener('export-kid-timeline', (e) => {
-            const { kidId, kidName } = e.detail; // kidId is numeric
+            const { kidId, kidName } = e.detail;
             if (kidId && kidName) {
                 this.handleTriggerExportKidTimeline(kidId, kidName);
             } else {
@@ -151,10 +159,6 @@ class FamilyTimelineApp {
     setupSettingsListeners() {
         const saveSettingsBtn = document.getElementById('saveSettingsBtn');
         saveSettingsBtn?.addEventListener('click', () => this.handleSaveSettings());
-        
-        // If you have a general import button in settings (not kid-specific)
-        const generalImportButton = document.getElementById('generalImportButton');
-        generalImportButton?.addEventListener('click', () => this.handleTriggerImportTimeline());
     }
 
     setupEntryListeners() {
@@ -185,6 +189,10 @@ class FamilyTimelineApp {
         this.state.on('parentSessionChanged', () => {
             this.ui.updateDisplay();
             this.ui.updateKidsDisplay();
+            // NEW: Load admin view when parent logs in
+            if (this.state.parentSession.active && this.state.mode === 'parent') {
+                this.handleLoadAdminView();
+            }
         });
         this.state.on('kidsChanged', () => {
             this.ui.updateKidsDisplay();
@@ -207,6 +215,13 @@ class FamilyTimelineApp {
             if (success) {
                 const loadedCount = await this.loadKidPasswordsToSession();
                 this.ui.updateKidsDisplay();
+                
+                // FIXED: Update target selection after loading passwords
+                this.ui.updateTargetSelection();
+                
+                // NEW: Load admin view
+                await this.handleLoadAdminView();
+                
                 if (loadedCount === 0 && this.state.kids.length > 0) {
                     const reEncrypt = confirm(
                         `Cannot decrypt existing kid passwords with this master password.\n\n` +
@@ -239,6 +254,7 @@ class FamilyTimelineApp {
         const viewerPasswordInput = document.getElementById('viewerPassword');
         if (viewerPasswordInput) viewerPasswordInput.value = '';
         this.ui.clearTimeline();
+        this.ui.clearAdminTimeline(); // NEW: Clear admin view
     }
 
     handleModeSwitch() {
@@ -310,9 +326,6 @@ class FamilyTimelineApp {
             if (!kid) return;
             const newPassword = prompt(`Enter new password for ${kid.name}:`);
             if (!newPassword) return;
-            // Add password strength validation if desired:
-            // const strength = this.crypto.validatePasswordStrength(newPassword);
-            // if (!strength.isValid) { showStatus(`Password is too weak. ${Object.entries(strength.requirements).filter(([_,v]) => !v).map(([k,_])=>k).join(', ')}`, 'error'); return; }
 
             const parentPassword = this.state.parentSession.password;
             if (!parentPassword) {
@@ -346,15 +359,25 @@ class FamilyTimelineApp {
         }
     }
 
+    // ENHANCED: Create entry with custom datetime
     async handleCreateEntry() {
         try {
             const text = document.getElementById('entryText').value;
             const imageFile = document.getElementById('imageInput').files[0];
             const audioFile = document.getElementById('audioInput').files[0];
             const targets = Array.from(document.querySelectorAll('input[name="target"]:checked')).map(cb => cb.value);
-
-            if (!text && !imageFile && !audioFile) { showStatus('Please provide some content for the entry', 'error'); return; }
-            if (targets.length === 0) { showStatus('Please select at least one timeline', 'error'); return; }
+            
+            // NEW: Get custom datetime
+            const customDateTime = document.getElementById('entryDateTime').value;
+            
+            if (!text && !imageFile && !audioFile) { 
+                showStatus('Please provide some content for the entry', 'error'); 
+                return; 
+            }
+            if (targets.length === 0) { 
+                showStatus('Please select at least one timeline', 'error'); 
+                return; 
+            }
 
             const kidTargets = targets.filter(t => t.startsWith('kid'));
             const missingPasswords = kidTargets.filter(target => {
@@ -379,10 +402,27 @@ class FamilyTimelineApp {
             const encryptedEntry = await this.crypto.encryptEntry(
                 content, targets, this.state.parentSession.password, this.state.parentSession.kidPasswords
             );
+            
+            // NEW: Use custom timestamp if provided
+            if (customDateTime) {
+                const customTimestamp = new Date(customDateTime).toISOString();
+                encryptedEntry.customTimestamp = customTimestamp;
+            }
+            
             await this.db.createEntry(encryptedEntry);
             document.getElementById('entryForm').reset();
             document.querySelectorAll('input[name="target"]').forEach(cb => cb.checked = false);
+            
+            // NEW: Reset datetime to current time
+            this.setDateTimeToNow(document.getElementById('entryDateTime'));
+            
             this.ui.updateCreateButtonState();
+            
+            // NEW: Refresh admin view if active
+            if (this.state.parentSession.active && this.state.mode === 'parent') {
+                await this.handleLoadAdminView();
+            }
+            
             showStatus(`Entry created successfully!`, 'success');
         } catch (error) {
             console.error('Create entry error:', error);
@@ -413,10 +453,16 @@ class FamilyTimelineApp {
 
     async handleTimelineEntryClick(entryId) {
         try {
-            const password = document.getElementById('viewerPassword').value;
-            if (!password) { showStatus('Password required to view entry details', 'error'); return; }
+            const password = document.getElementById('viewerPassword').value || this.state.parentSession.password;
+            if (!password) { 
+                showStatus('Password required to view entry details', 'error'); 
+                return; 
+            }
             const entry = await this.db.getEntry(entryId);
-            if (!entry) { showStatus('Entry not found.', 'error'); return; }
+            if (!entry) { 
+                showStatus('Entry not found.', 'error'); 
+                return; 
+            }
             const decryptedContent = await this.crypto.decryptEntry(entry, password);
             if (decryptedContent) {
                 this.ui.showEntryModal(decryptedContent);
@@ -429,10 +475,93 @@ class FamilyTimelineApp {
         }
     }
 
+    // NEW: Admin view methods
+    async handleLoadAdminView() {
+        if (!this.state.parentSession.active || !this.state.parentSession.password) {
+            console.warn('Admin view requires active parent session');
+            return;
+        }
+
+        try {
+            console.log('📋 Loading admin view - all entries');
+            const entries = await this.db.getEntries();
+            const adminEntries = [];
+            
+            for (const entry of entries) {
+                try {
+                    const decryptedContent = await this.crypto.decryptEntry(entry, this.state.parentSession.password);
+                    if (decryptedContent) {
+                        adminEntries.push({ 
+                            ...entry, 
+                            decryptedContent: decryptedContent,
+                            isAdminView: true 
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Admin view: Could not decrypt entry ID ${entry.id}`, error.message);
+                }
+            }
+            
+            console.log(`📋 Admin view loaded ${adminEntries.length} entries`);
+            this.ui.displayAdminEntries(adminEntries);
+        } catch (error) {
+            console.error('Load admin view error:', error);
+            showStatus('Failed to load admin view: ' + error.message, 'error');
+        }
+    }
+
+    async handleRefreshAdminView() {
+        showStatus('Refreshing admin view...', 'info');
+        await this.handleLoadAdminView();
+        showStatus('Admin view refreshed', 'success');
+    }
+
+    async handleExportAllData() {
+        try {
+            showStatus('Exporting all data...', 'info');
+            const exportData = await this.db.exportData();
+            const jsonData = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonData], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '');
+            a.download = `family_timeline_backup_${timestamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showStatus('All data exported successfully!', 'success');
+        } catch (error) {
+            console.error('Export all data error:', error);
+            showStatus('Failed to export data: ' + error.message, 'error');
+        }
+    }
+
+    // NEW: DateTime helper methods
+    handleSetCurrentTime() {
+        const datetimeInput = document.getElementById('entryDateTime');
+        if (datetimeInput) {
+            this.setDateTimeToNow(datetimeInput);
+        }
+    }
+
+    setDateTimeToNow(datetimeInput) {
+        if (!datetimeInput) return;
+        const now = new Date();
+        // Format for datetime-local input: YYYY-MM-DDTHH:mm
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        datetimeInput.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+    }
+
     async loadKidPasswordsToSession() {
         if (!this.state.parentSession.active || !this.state.parentSession.password) {
             console.warn('loadKidPasswordsToSession: Parent session not active or master password not set.');
-            this.state.parentSession.kidPasswords = {}; // Ensure it's an empty object
+            this.state.parentSession.kidPasswords = {};
             return 0;
         }
         const parentPassword = this.state.parentSession.password;
@@ -452,7 +581,7 @@ class FamilyTimelineApp {
             try {
                 const decryptedPassword = await this.crypto.decryptKidPassword(kid, parentPassword);
                 if (decryptedPassword) {
-                    kidPasswords[kid.id] = decryptedPassword; // Key is numeric ID
+                    kidPasswords[kid.id] = decryptedPassword;
                     successCount++;
                 } else {
                     console.warn(`loadKidPasswordsToSession: Failed to decrypt password for kid ${kid.name} (ID: ${kid.id}).`);
@@ -518,6 +647,10 @@ class FamilyTimelineApp {
                 } else {
                      showStatus("Timeline imported. Enter password in viewer to see entries if in Kid Mode.", "info");
                 }
+                // NEW: Refresh admin view if active
+                if (this.state.parentSession.active && this.state.mode === 'parent') {
+                    await this.handleLoadAdminView();
+                }
             } catch (error) {
                 console.error('Failed to import timeline:', error);
                 showStatus(`Import failed: ${error.message}`, 'error');
@@ -538,8 +671,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const kidsInState = app.state.kids.map(k => ({ id: k.id, name: k.name, keyInEncryptionInfo: `kid${k.id}`, hasEncryptedFields: !!k.encryptedPassword_base64 }));
         console.log('Kids in State:', JSON.stringify(kidsInState, null, 2));
         console.log('Session Kid Passwords (Numeric IDs as keys):', Object.keys(app.state.parentSession.kidPasswords));
-        // For deeper debug, uncomment carefully:
-        // console.log('Full Session Kid Passwords object:', JSON.stringify(app.state.parentSession.kidPasswords));
         console.log('Database instance:', app.db.db ? 'Available' : 'Not available');
         console.log('Crypto instance in DB:', app.db.crypto ? 'Available' : 'Not available');
     };

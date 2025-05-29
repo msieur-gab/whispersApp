@@ -1,5 +1,5 @@
 /**
- * Database Management
+ * Enhanced Database Management - Added Custom Timestamp Support
  * Handles all IndexedDB operations using Dexie
  */
 
@@ -7,7 +7,7 @@ export class DatabaseManager {
     constructor(cryptoManager) {
         this.db = null;
         this.initialized = false;
-        this.crypto = cryptoManager; // Store cryptoManager instance
+        this.crypto = cryptoManager;
         if (!this.crypto) {
             console.warn("CryptoManager instance was not provided to DatabaseManager at construction. Some operations like import/export might fail.");
         }
@@ -140,20 +140,32 @@ export class DatabaseManager {
         }
     }
 
-    // Entries Management
+    // ENHANCED: Entries Management with Custom Timestamps
     async createEntry(entryData) {
         try {
             this.ensureInitialized();
+            
+            // NEW: Use custom timestamp if provided, otherwise current time
+            const timestamp = entryData.customTimestamp || new Date().toISOString();
+            
             const entry = {
-                timestamp: new Date().toISOString(),
+                timestamp: timestamp, // ENHANCED: Custom timestamp support
                 targetTimelines: entryData.targets || [],
                 encryptedContent_base64: entryData.encryptedContent_base64,
                 data_iv_base64: entryData.data_iv_base64,
                 encryptionInfo: entryData.encryptionInfo,
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString() // Keep original creation time for auditing
             };
+            
             const entryId = await this.db.entries.add(entry);
-            console.log(`📝 Entry created: ID ${entryId}`);
+            
+            // NEW: Enhanced logging for custom timestamps
+            if (entryData.customTimestamp) {
+                console.log(`📝 Entry created with custom timestamp: ID ${entryId}, timestamp: ${timestamp}`);
+            } else {
+                console.log(`📝 Entry created: ID ${entryId}`);
+            }
+            
             return entryId;
         } catch (error) {
             console.error('Failed to create entry:', error);
@@ -162,7 +174,7 @@ export class DatabaseManager {
     }
 
     async getEntries(limit = 100) {
-        try { // Corrected: Added opening curly brace for try block
+        try {
             this.ensureInitialized();
             const entries = await this.db.entries
                 .orderBy('timestamp')
@@ -171,7 +183,7 @@ export class DatabaseManager {
                 .toArray();
             console.log(`📚 Loaded ${entries.length} entries from database`);
             return entries;
-        } catch (error) { // Corrected: Ensured catch block is properly formed
+        } catch (error) {
             console.error('Failed to get entries:', error);
             return [];
         }
@@ -201,6 +213,28 @@ export class DatabaseManager {
             return entries;
         } catch (error) {
             console.error('Failed to get entries for timeline:', error);
+            return [];
+        }
+    }
+
+    // NEW: Get entries within date range
+    async getEntriesByDateRange(startDate, endDate, limit = 100) {
+        try {
+            this.ensureInitialized();
+            const start = new Date(startDate).toISOString();
+            const end = new Date(endDate).toISOString();
+            
+            const entries = await this.db.entries
+                .where('timestamp')
+                .between(start, end, true, true)
+                .reverse()
+                .limit(limit)
+                .toArray();
+            
+            console.log(`📚 Loaded ${entries.length} entries between ${startDate} and ${endDate}`);
+            return entries;
+        } catch (error) {
+            console.error('Failed to get entries by date range:', error);
             return [];
         }
     }
@@ -239,14 +273,19 @@ export class DatabaseManager {
     async getStats() {
         try {
             this.ensureInitialized();
-            const [totalEntries, totalKids] = await Promise.all([
+            const [totalEntries, totalKids, oldestEntry, newestEntry] = await Promise.all([
                 this.db.entries.count(),
-                this.db.kids.where('isActive').equals(1).count()
+                this.db.kids.where('isActive').equals(1).count(),
+                this.db.entries.orderBy('timestamp').first(),
+                this.db.entries.orderBy('timestamp').last()
             ]);
+            
             const stats = {
                 totalEntries,
                 totalKids,
-                dbSize: await this.estimateDbSize()
+                dbSize: await this.estimateDbSize(),
+                oldestEntry: oldestEntry ? oldestEntry.timestamp : null,
+                newestEntry: newestEntry ? newestEntry.timestamp : null
             };
             console.log('📊 Database stats:', stats);
             return stats;
@@ -331,8 +370,6 @@ export class DatabaseManager {
                         data_iv_base64: entryFromFile.data_iv_base64,
                         encryptionInfo: entryFromFile.encryptionInfo,
                         createdAt: entryFromFile.createdAt || new Date().toISOString()
-                        // Note: Assigning entryFromFile.id might cause issues if ID already exists.
-                        // id: entryFromFile.id (Consider ID collision strategy)
                     };
                     const newEntryId = await this.db.entries.add(entryToStore);
                     importedEntryIds.push(newEntryId);
@@ -377,7 +414,7 @@ export class DatabaseManager {
         }
     }
 
-    async importData(data) { // Removed parentPasswordForKidPasswords, as it wasn't used
+    async importData(data) {
         try {
             this.ensureInitialized();
             if (!data || (data.version !== 1 && data.version !== 2) ) {

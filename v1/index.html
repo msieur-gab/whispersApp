@@ -52,7 +52,7 @@
                 <button class="btn" id="addKidBtn">Add Kid</button>
             </div>
             <div class="kids-list" id="kidsList">
-                </div>
+            </div>
         </section>
 
         <section class="menu-section" id="appSettingsSection">
@@ -81,10 +81,34 @@
     <main class="main-content">
         <div class="status-message hidden" id="statusMessage"></div>
 
+        <!-- ENHANCED: Parent Admin Section -->
+        <section class="content-section hidden" id="adminSection">
+            <h2>📋 Admin View - All Messages</h2>
+            <p class="description">As parent, you can see all timeline entries across all kids.</p>
+            
+            <div class="admin-controls">
+                <button class="btn-secondary" id="refreshAdminView">🔄 Refresh</button>
+                <button class="btn-secondary" id="exportAllData">📥 Export All Data</button>
+            </div>
+
+            <div class="timeline-entries admin-timeline" id="adminTimelineEntries">
+                <p class="placeholder-text">Loading all timeline entries...</p>
+            </div>
+        </section>
+
         <section class="content-section hidden" id="createSection">
             <h2>Create New Entry</h2>
             <form class="entry-form" id="entryForm">
                 <textarea id="entryText" placeholder="Write your memory or message..." rows="4"></textarea>
+                
+                <!-- ENHANCED: Date/Time Selection -->
+                <div class="datetime-selection">
+                    <label for="entryDateTime">📅 Entry Date & Time:</label>
+                    <input type="datetime-local" id="entryDateTime" />
+                    <button type="button" class="btn-secondary btn-small" id="setCurrentTime">Now</button>
+                    <p class="help-text">Leave blank to use current time, or set a specific date for this memory.</p>
+                </div>
+
                 <div class="file-inputs">
                     <label class="file-input">
                         <input type="file" id="imageInput" accept="image/*">
@@ -97,7 +121,7 @@
                 </div>
                 <div class="target-selection" id="targetSelection">
                     <h4>Send to:</h4>
-                    </div>
+                </div>
                 <button type="submit" class="btn-primary" disabled id="createEntryBtn">
                     Create Entry
                 </button>
@@ -109,7 +133,7 @@
             <div class="password-input">
                 <label for="viewerPassword">Enter Password to View Timeline:</label>
                 <input type="password" id="viewerPassword" placeholder="Kid or Parent Password">
-                </div>
+            </div>
 
             <div class="form-group" style="margin-top: 1rem; margin-bottom: 1rem;">
                 <button id="importTimelineViewBtn" class="btn-secondary">Import My Timeline</button>
@@ -122,7 +146,7 @@
 
         <modal-dialog id="entryModal">
             <div class="entry-detail" id="entryDetail">
-                </div>
+            </div>
         </modal-dialog>
     </main>
 
@@ -130,5 +154,89 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
     <script type="module" src="main.js"></script>
+
+    <style>
+        /* Enhanced Styles for New Features */
+        .admin-timeline {
+            border: 2px solid #3b82f6;
+            background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+        }
+
+        .admin-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .datetime-selection {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: var(--color-gray-light);
+            border-radius: var(--border-radius);
+            border: 1px solid var(--color-border);
+        }
+
+        .datetime-selection label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--color-gray-dark);
+        }
+
+        .datetime-selection input[type="datetime-local"] {
+            width: 100%;
+            max-width: 300px;
+            padding: 0.5rem;
+            border: 1px solid var(--color-border);
+            border-radius: var(--border-radius);
+            font-family: inherit;
+            margin-bottom: 0.5rem;
+        }
+
+        .btn-small {
+            padding: 0.25rem 0.5rem;
+            font-size: var(--font-size-sm);
+            margin-left: 0.5rem;
+        }
+
+        .help-text {
+            font-size: var(--font-size-sm);
+            color: var(--color-gray);
+            margin: 0;
+            font-style: italic;
+        }
+
+        .description {
+            font-size: var(--font-size-sm);
+            color: var(--color-gray);
+            margin-bottom: 1rem;
+            font-style: italic;
+        }
+
+        .admin-entry {
+            border-left: 4px solid #3b82f6;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .admin-entry .entry-meta {
+            background: rgba(59, 130, 246, 0.1);
+            padding: 0.5rem;
+            margin: -1rem -1rem 0.75rem -1rem;
+            border-radius: var(--border-radius) var(--border-radius) 0 0;
+            font-size: var(--font-size-sm);
+            color: #1e40af;
+        }
+
+        @media (max-width: 768px) {
+            .admin-controls {
+                flex-direction: column;
+            }
+
+            .datetime-selection input[type="datetime-local"] {
+                max-width: 100%;
+            }
+        }
+    </style>
 </body>
 </html>
