@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Header -->
     <header class="header">
         <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
             <span></span>
@@ -18,14 +17,12 @@
         <div class="mode-indicator" id="modeIndicator">Kid Mode</div>
     </header>
 
-    <!-- Off-canvas Menu -->
     <nav class="off-canvas" id="offCanvas">
         <div class="menu-header">
             <h2>Settings</h2>
             <button class="close-menu" id="closeMenu">&times;</button>
         </div>
         
-        <!-- Parent Auth Section -->
         <section class="menu-section" id="parentAuthSection">
             <h3>Parent Access</h3>
             <div id="parentLogin">
@@ -42,11 +39,8 @@
             </div>
         </section>
 
-        <!-- Kids Management Section -->
         <section class="menu-section hidden" id="kidsSection">
             <h3>Kids Management</h3>
-            
-            <!-- Add Kid Form -->
             <div class="add-kid-form">
                 <h4>Add New Kid</h4>
                 <input type="text" id="newKidName" placeholder="Kid's name">
@@ -57,14 +51,10 @@
                 </password-strength-checker>
                 <button class="btn" id="addKidBtn">Add Kid</button>
             </div>
-
-            <!-- Kids List -->
             <div class="kids-list" id="kidsList">
-                <!-- Dynamic kids will be inserted here -->
-            </div>
+                </div>
         </section>
 
-        <!-- App Settings -->
         <section class="menu-section" id="appSettingsSection">
             <h3>App Settings</h3>
             <label>
@@ -76,73 +66,68 @@
                 <input type="text" id="timelineNameInput" placeholder="Family Adventures">
             </label>
             <button class="btn" id="saveSettingsBtn">Save Settings</button>
+            <div style="margin-top: 1rem;">
+                 <h4>Data Management (Parent)</h4>
+                <button id="importTimelineParentBtn" class="btn-secondary">Import Timeline (Parent)</button>
+                <p class="description">Import a timeline file. Requires parent or relevant kid password.</p>
+            </div>
         </section>
 
-        <!-- Mode Switch -->
         <section class="menu-section">
             <button class="btn-mode" id="switchModeBtn">Switch to Parent Mode</button>
         </section>
     </nav>
 
-    <!-- Main Content -->
     <main class="main-content">
-        <!-- Status Messages -->
         <div class="status-message hidden" id="statusMessage"></div>
 
-        <!-- Create Entry Section (Parent Mode Only) -->
         <section class="content-section hidden" id="createSection">
             <h2>Create New Entry</h2>
-            
             <form class="entry-form" id="entryForm">
                 <textarea id="entryText" placeholder="Write your memory or message..." rows="4"></textarea>
-                
                 <div class="file-inputs">
                     <label class="file-input">
                         <input type="file" id="imageInput" accept="image/*">
-                        <span>Add Image</span>
+                        <span data-default-text="Add Image">Add Image</span>
                     </label>
                     <label class="file-input">
                         <input type="file" id="audioInput" accept="audio/*">
-                        <span>Add Audio</span>
+                        <span data-default-text="Add Audio">Add Audio</span>
                     </label>
                 </div>
-
                 <div class="target-selection" id="targetSelection">
                     <h4>Send to:</h4>
-                    <!-- Dynamic checkboxes will be inserted here -->
-                </div>
-
+                    </div>
                 <button type="submit" class="btn-primary" disabled id="createEntryBtn">
                     Create Entry
                 </button>
             </form>
         </section>
 
-        <!-- View Timeline Section -->
         <section class="content-section" id="viewSection">
             <h2>My Timeline</h2>
-            
             <div class="password-input">
-                <input type="password" id="viewerPassword" placeholder="Enter your timeline password">
-            </div>
+                <label for="viewerPassword">Enter Password to View Timeline:</label>
+                <input type="password" id="viewerPassword" placeholder="Kid or Parent Password">
+                </div>
 
+            <div class="form-group" style="margin-top: 1rem; margin-bottom: 1rem;">
+                <button id="importTimelineViewBtn" class="btn-secondary">Import My Timeline</button>
+                <p class="description">Import a timeline file that was exported for you (using your password).</p>
+            </div>
             <div class="timeline-entries" id="timelineEntries">
                 <p class="placeholder-text">Enter your password to view your timeline entries.</p>
             </div>
         </section>
 
-        <!-- Entry Detail Modal -->
         <modal-dialog id="entryModal">
             <div class="entry-detail" id="entryDetail">
-                <!-- Entry content will be populated here -->
-            </div>
+                </div>
         </modal-dialog>
     </main>
 
-    <!-- Overlay for off-canvas menu -->
     <div class="overlay hidden" id="overlay"></div>
 
-    <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
     <script type="module" src="main.js"></script>
 </body>

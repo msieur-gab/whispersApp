@@ -1,0 +1,57 @@
+{
+  "version": 2,
+  "exportedAt": "2025-05-28T20:31:35.294Z",
+  "timelineOwnerName": "lena",
+  "timelineKidIdKey": "kid2",
+  "entries": [
+    {
+      "id": 3,
+      "timestamp": "2025-05-28T19:45:55.218Z",
+      "encryptedContent_base64": "6Jtr6AIgHrritLe+S5FtNkOkDSaMOEzFY/6yBQishS0LWLr/vDF8",
+      "data_iv_base64": "MDB40oLNlFpnt30W",
+      "encryptionInfo": {
+        "parent": {
+          "encryptedDek_base64": "LeJN5wUydeoCO4uKgvV8KvRmN5Xgqr3PYZiGHlgoX1ThAKw5p4Jk8rXcRv756Wu3",
+          "salt_base64": "yycoTh2gTWFlUMnjxoYTPg==",
+          "iv_base64": "Zxc3DaT4fmcfN9+3",
+          "kdfIterations": 300000
+        },
+        "kid2": {
+          "encryptedDek_base64": "ClVY86EluI9Ui2ZVN2h2HYvGSSlYn8k5LVFwZAkMdB/enZMB6eFZWv7RgkRANuaN",
+          "salt_base64": "OtosqBconH38bvTTUKk5Gw==",
+          "iv_base64": "qxqisReQqlB6y08X",
+          "kdfIterations": 300000
+        }
+      },
+      "targetTimelines": [
+        "kid2"
+      ],
+      "createdAt": "2025-05-28T19:45:55.218Z"
+    },
+    {
+      "id": 4,
+      "timestamp": "2025-05-28T19:45:58.792Z",
+      "encryptedContent_base64": "3U51ihSwgbNZNWLHLwo+lYYXUHPtHFqlXGRgNbDvC8IbCXtNRGv24Pw=",
+      "data_iv_base64": "3EKM1Uv3ezQxoBiR",
+      "encryptionInfo": {
+        "parent": {
+          "encryptedDek_base64": "P+MORL1t0T1N7gyiuQXeyuY7tWBFOux6f5FimwSClH35PGf7e18TmfgMQHj9Jt0F",
+          "salt_base64": "HNmVEQmdmKU/PqiAw+hL5Q==",
+          "iv_base64": "6Ap8zfFg0vT4FVt5",
+          "kdfIterations": 300000
+        },
+        "kid2": {
+          "encryptedDek_base64": "3NPKwE+8qASGUxc6zJX7OADbggbM4JORxpHsqy3zVy02U4D0GEiMQ3lgIvS6cR8z",
+          "salt_base64": "Pc7UQJhdPjWIxXQ1Lryljg==",
+          "iv_base64": "M9ChukUiO0tfKSWE",
+          "kdfIterations": 300000
+        }
+      },
+      "targetTimelines": [
+        "kid1",
+        "kid2"
+      ],
+      "createdAt": "2025-05-28T19:45:58.792Z"
+    }
+  ]
+}
