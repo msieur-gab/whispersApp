@@ -735,3 +735,33 @@ textarea:focus {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+
+.password-input-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.password-input-group input {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.password-input-group button {
+    flex-shrink: 0;
+    margin-bottom: 0;
+}
+
+.loading-indicator {
+    text-align: center;
+    padding: 1rem;
+    color: #666;
+    font-style: italic;
+}
+
+@media (max-width: 480px) {
+    .password-input-group {
+        flex-direction: column;
+    }
+}

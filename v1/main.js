@@ -169,20 +169,54 @@ class FamilyTimelineApp {
         });
     }
 
-    setupTimelineListeners() {
-        const viewerPasswordInput = document.getElementById('viewerPassword');
-        viewerPasswordInput?.addEventListener('input', (e) => {
-            const password = e.target.value;
-            if (password.length > 0) {
-                this.handleLoadTimeline(password);
-            } else {
-                this.ui.clearTimeline();
+setupTimelineListeners() {
+    // REPLACE your current setupTimelineListeners with this:
+    const timelineForm = document.getElementById('timelinePasswordForm');
+    const loadingIndicator = document.getElementById('timelineLoading');
+    
+    timelineForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const password = document.getElementById('viewerPassword').value.trim();
+        
+        if (!password) {
+            showStatus('Please enter a password', 'error');
+            return;
+        }
+        
+        // Show loading state
+        loadingIndicator?.classList.remove('hidden');
+        const loadBtn = document.getElementById('loadTimelineBtn');
+        const originalText = loadBtn?.textContent || 'Load Timeline';
+        if (loadBtn) {
+            loadBtn.disabled = true;
+            loadBtn.textContent = 'Loading...';
+        }
+        
+        try {
+            await this.handleLoadTimeline(password);
+        } finally {
+            // Hide loading state
+            loadingIndicator?.classList.add('hidden');
+            if (loadBtn) {
+                loadBtn.disabled = false;
+                loadBtn.textContent = originalText;
             }
-        });
-        document.addEventListener('timeline-entry-click', (e) => {
-            this.handleTimelineEntryClick(e.detail.entryId);
-        });
-    }
+        }
+    });
+    
+    // Clear timeline when password is cleared (but don't decrypt)
+    const passwordInput = document.getElementById('viewerPassword');
+    passwordInput?.addEventListener('input', (e) => {
+        if (e.target.value.trim() === '') {
+            this.ui.clearTimeline();
+        }
+    });
+    
+    // Keep your existing timeline-entry-click listener
+    document.addEventListener('timeline-entry-click', (e) => {
+        this.handleTimelineEntryClick(e.detail.entryId);
+    });
+}
 
     setupStateListeners() {
         this.state.on('modeChanged', () => this.ui.updateDisplay());

@@ -130,10 +130,16 @@
 
         <section class="content-section" id="viewSection">
             <h2>My Timeline</h2>
-            <div class="password-input">
-                <label for="viewerPassword">Enter Password to View Timeline:</label>
-                <input type="password" id="viewerPassword" placeholder="Kid or Parent Password">
-            </div>
+            <form class="password-form" id="timelinePasswordForm">
+    <label for="viewerPassword">Enter Password to View Timeline:</label>
+    <div class="password-input-group">
+        <input type="password" id="viewerPassword" placeholder="Kid or Parent Password" required>
+        <button type="submit" class="btn-primary" id="loadTimelineBtn">Load Timeline</button>
+    </div>
+    <div class="loading-indicator hidden" id="timelineLoading">
+        <span>🔓 Decrypting timeline entries...</span>
+    </div>
+</form>
 
             <div class="form-group" style="margin-top: 1rem; margin-bottom: 1rem;">
                 <button id="importTimelineViewBtn" class="btn-secondary">Import My Timeline</button>

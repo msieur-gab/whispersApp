@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Timeline - Stay Connected</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Status Messages -->
+    <div class="status-message hidden" id="statusMessage"></div>
+
+    <!-- Mode Selection (shown after onboarding) -->
+    <div class="mode-selection-screen hidden" id="modeSelectionScreen">
+        <div class="mode-selection-container">
+            <h1>👋 Welcome to Your Family Timeline</h1>
+            <p>Who are you?</p>
+            
+            <div class="mode-cards">
+                <!-- Parent Mode Card -->
+                <div class="mode-card parent-mode" id="selectParentMode">
+                    <div class="mode-icon">👨‍👩‍👧‍👦</div>
+                    <h2>I'm a Parent</h2>
+                    <p>Create memories, manage family timeline, and send messages to children</p>
+                    <ul class="mode-features">
+                        <li>✅ Create timeline entries</li>
+                        <li>✅ Add photos and voice messages</li>
+                        <li>✅ Translate messages automatically</li>
+                        <li>✅ Export timelines for children</li>
+                        <li>✅ Manage family accounts</li>
+                    </ul>
+                    <button class="btn-mode-select btn-parent">Enter Parent Mode</button>
+                </div>
+                
+                <!-- Kid Mode Card -->
+                <div class="mode-card kid-mode" id="selectKidMode">
+                    <div class="mode-icon">👧👦</div>
+                    <h2>I'm a Child</h2>
+                    <p>View your personal timeline and messages from family</p>
+                    <ul class="mode-features">
+                        <li>📖 Read your timeline messages</li>
+                        <li>🖼️ View photos and listen to audio</li>
+                        <li>🌐 See messages in your language</li>
+                        <li>🔒 Private access with your password</li>
+                        <li>💾 Export your timeline</li>
+                    </ul>
+                    <button class="btn-mode-select btn-kid">Enter Kid Mode</button>
+                </div>
+            </div>
+            
+            <div class="mode-selection-footer">
+                <p><small>You can always switch between modes later</small></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Interface (shown after mode selection) -->
+    <div class="main-app hidden" id="mainApp">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-title">
+                <h1>Family Timeline</h1>
+                <div class="mode-indicator" id="modeIndicator">Welcome</div>
+            </div>
+            <div class="header-actions">
+                <button class="btn-switch-mode" id="switchModeBtn" title="Switch between Parent and Kid mode">
+                    🔄 Switch Mode
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Parent Mode Content -->
+            <div class="mode-content parent-content hidden" id="parentContent">
+                <h2>👨‍💼 Parent Dashboard</h2>
+                <p>Welcome! Your family timeline is set up and ready.</p>
+                
+                <div class="dashboard-section">
+                    <h3>Your Family</h3>
+                    <div class="family-info" id="familyInfo">
+                        <!-- Family information will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="dashboard-section">
+                    <h3>Quick Actions</h3>
+                    <div class="quick-actions">
+                        <button class="btn btn-primary" onclick="alert('Create Entry feature coming soon!')">
+                            📝 Create Memory
+                        </button>
+                        <button class="btn btn-secondary" onclick="alert('Export feature coming soon!')">
+                            📥 Export Timeline
+                        </button>
+                        <button class="btn btn-secondary" id="showFamilyDetailsBtn">
+                            👥 View Family Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kid Mode Content -->
+            <div class="mode-content kid-content hidden" id="kidContent">
+                <h2>👧👦 Kid Timeline</h2>
+                <p>Enter your password to view your timeline messages.</p>
+                
+                <form class="password-form" id="kidPasswordForm">
+                    <div class="form-group">
+                        <label for="kidPassword">Your Timeline Password:</label>
+                        <input type="password" id="kidPassword" placeholder="Enter your password" required>
+                        <button type="submit" class="btn btn-primary">Load My Timeline</button>
+                    </div>
+                </form>
+
+                <div class="timeline-area" id="timelineArea">
+                    <p class="placeholder-text">Enter your password to see your messages from family ❤️</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Family Details Modal -->
+    <div class="modal hidden" id="familyModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>👨‍👩‍👧‍👦 Family Details</h3>
+                <button class="btn-close" id="closeFamilyModal">&times;</button>
+            </div>
+            <div class="modal-body" id="familyModalBody">
+                <!-- Family details will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Debug Panel (hidden by default) -->
+    <div class="debug-panel hidden" id="debugPanel">
+        <h4>🐛 Debug Info</h4>
+        <button onclick="window.debugApp()">Debug App State</button>
+        <button onclick="window.resetApp()">Reset App (Clear All Data)</button>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.4/dexie.min.js"></script>
+    <script type="module" src="main.js"></script>
+
+    <!-- Debug Toggle (Ctrl+D) -->
+    <script>
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'd') {
+                e.preventDefault();
+                const debugPanel = document.getElementById('debugPanel');
+                debugPanel.classList.toggle('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
